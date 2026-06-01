@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interests</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div class="logo">
+        <span class="logo-icon">◈</span>
+        <span class="logo-text">Interests</span>
+      </div>
+
+      <nav class="nav-section">
+        <button class="nav-item active" data-view="inbox">
+          <span class="nav-icon">⊞</span> Inbox
+          <span class="nav-count" id="count-inbox"></span>
+        </button>
+        <button class="nav-item" data-view="recent">
+          <span class="nav-icon">◷</span> Recent
+          <span class="nav-count" id="count-recent"></span>
+        </button>
+        <button class="nav-item" data-view="favorites">
+          <span class="nav-icon">★</span> Favorites
+          <span class="nav-count" id="count-favorites"></span>
+        </button>
+      </nav>
+
+      <div class="section-label">Categories</div>
+      <nav class="nav-section" id="category-nav"></nav>
+
+      <div class="section-label">Tags</div>
+      <div class="tag-cloud" id="tag-cloud"></div>
+    </aside>
+
+    <main id="main">
+      <header class="main-header">
+        <div class="search-wrapper">
+          <span class="search-icon">⌕</span>
+          <input type="text" id="search-input" placeholder="Search interests…" autocomplete="off">
+        </div>
+        <button id="random-btn" title="Show a random interest">⚄ Random</button>
+        <button id="add-btn" class="btn-primary">+ Add</button>
+      </header>
+
+      <div id="view-title" class="view-title">Inbox</div>
+
+      <div id="items-container" class="items-container"></div>
+
+      <div id="empty-state" class="empty-state hidden">
+        <div class="empty-icon">◈</div>
+        <p id="empty-message">Nothing here yet.</p>
+        <p class="empty-hint">Press <kbd>N</kbd> or click <strong>+ Add</strong> to capture something.</p>
+      </div>
+    </main>
+  </div>
+
+  <!-- Add / Edit modal -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modal-title">Add Interest</h2>
+        <button id="modal-close" class="btn-icon" aria-label="Close">×</button>
+      </div>
+      <form id="item-form" novalidate>
+        <div class="form-group">
+          <input type="text" id="form-title" placeholder="What are you interested in?" autocomplete="off" required>
+        </div>
+        <div class="form-group">
+          <div id="form-category" class="category-select"></div>
+        </div>
+        <div class="form-group">
+          <input type="text" id="form-tags" placeholder="Tags, comma separated (e.g. books, design)" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <textarea id="form-note" placeholder="Notes (optional)" rows="3"></textarea>
+        </div>
+        <div class="form-group priority-group">
+          <label>Priority</label>
+          <div class="priority-select">
+            <button type="button" class="priority-btn" data-priority="low">Low</button>
+            <button type="button" class="priority-btn active" data-priority="medium">Medium</button>
+            <button type="button" class="priority-btn" data-priority="high">High</button>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="button" id="form-cancel" class="btn-secondary">Cancel</button>
+          <button type="submit" class="btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Random interest modal -->
+  <div id="random-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Something to explore</h2>
+        <button id="random-close" class="btn-icon" aria-label="Close">×</button>
+      </div>
+      <div id="random-content"></div>
+      <div class="form-actions">
+        <button id="random-again" class="btn-secondary">⚄ Another</button>
+        <button id="random-done" class="btn-primary">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
