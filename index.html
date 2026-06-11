@@ -1,114 +1,451 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Interests</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>いっしょぐらし</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="app">
-    <aside id="sidebar">
-      <div class="logo">
-        <span class="logo-icon">◈</span>
-        <span class="logo-text">Interests</span>
+
+<!-- ===================== セットアップウィザード ===================== -->
+<div id="screen-setup" class="screen">
+  <div class="setup-container">
+    <div class="setup-header">
+      <h1 class="setup-title">いっしょぐらし</h1>
+      <p class="setup-subtitle">はじめましょう！</p>
+    </div>
+
+    <!-- ステップインジケーター -->
+    <div class="step-indicator">
+      <div class="step-dot active" data-step="1"></div>
+      <div class="step-line"></div>
+      <div class="step-dot" data-step="2"></div>
+      <div class="step-line"></div>
+      <div class="step-dot" data-step="3"></div>
+    </div>
+
+    <!-- Step 1: 見た目 -->
+    <div id="setup-step-1" class="setup-step active">
+      <h2 class="setup-step-title">✨ キャラクターの見た目</h2>
+
+      <div class="setup-preview-wrap">
+        <div id="setup-chara-preview" class="chara-preview"></div>
       </div>
 
-      <nav class="nav-section">
-        <button class="nav-item active" data-view="inbox">
-          <span class="nav-icon">⊞</span> Inbox
-          <span class="nav-count" id="count-inbox"></span>
-        </button>
-        <button class="nav-item" data-view="recent">
-          <span class="nav-icon">◷</span> Recent
-          <span class="nav-count" id="count-recent"></span>
-        </button>
-        <button class="nav-item" data-view="favorites">
-          <span class="nav-icon">★</span> Favorites
-          <span class="nav-count" id="count-favorites"></span>
-        </button>
-      </nav>
-
-      <div class="section-label">Categories</div>
-      <nav class="nav-section" id="category-nav"></nav>
-
-      <div class="section-label">Tags</div>
-      <div class="tag-cloud" id="tag-cloud"></div>
-    </aside>
-
-    <main id="main">
-      <header class="main-header">
-        <div class="search-wrapper">
-          <span class="search-icon">⌕</span>
-          <input type="text" id="search-input" placeholder="Search interests…" autocomplete="off">
+      <div class="setup-form">
+        <div class="form-row">
+          <label>髪型</label>
+          <div id="hairStyle-select" class="chip-group"></div>
         </div>
-        <button id="random-btn" title="Show a random interest">⚄ Random</button>
-        <button id="add-btn" class="btn-primary">+ Add</button>
-      </header>
-
-      <div id="view-title" class="view-title">Inbox</div>
-
-      <div id="items-container" class="items-container"></div>
-
-      <div id="empty-state" class="empty-state hidden">
-        <div class="empty-icon">◈</div>
-        <p id="empty-message">Nothing here yet.</p>
-        <p class="empty-hint">Press <kbd>N</kbd> or click <strong>+ Add</strong> to capture something.</p>
-      </div>
-    </main>
-  </div>
-
-  <!-- Add / Edit modal -->
-  <div id="modal-overlay" class="modal-overlay hidden">
-    <div class="modal">
-      <div class="modal-header">
-        <h2 id="modal-title">Add Interest</h2>
-        <button id="modal-close" class="btn-icon" aria-label="Close">×</button>
-      </div>
-      <form id="item-form" novalidate>
-        <div class="form-group">
-          <input type="text" id="form-title" placeholder="What are you interested in?" autocomplete="off" required>
+        <div class="form-row">
+          <label>アクセサリー</label>
+          <div id="accessory-select" class="chip-group"></div>
         </div>
-        <div class="form-group">
-          <div id="form-category" class="category-select"></div>
-        </div>
-        <div class="form-group">
-          <input type="text" id="form-tags" placeholder="Tags, comma separated (e.g. books, design)" autocomplete="off">
-        </div>
-        <div class="form-group">
-          <textarea id="form-note" placeholder="Notes (optional)" rows="3"></textarea>
-        </div>
-        <div class="form-group priority-group">
-          <label>Priority</label>
-          <div class="priority-select">
-            <button type="button" class="priority-btn" data-priority="low">Low</button>
-            <button type="button" class="priority-btn active" data-priority="medium">Medium</button>
-            <button type="button" class="priority-btn" data-priority="high">High</button>
+        <div class="color-grid">
+          <div class="color-item">
+            <label for="c-hair">髪の色</label>
+            <input type="color" id="c-hair" value="#6b4f3a">
+          </div>
+          <div class="color-item">
+            <label for="c-eye">目の色</label>
+            <input type="color" id="c-eye" value="#4a6fa5">
+          </div>
+          <div class="color-item">
+            <label for="c-skin">肌の色</label>
+            <input type="color" id="c-skin" value="#ffe3cf">
+          </div>
+          <div class="color-item">
+            <label for="c-outfit">服の色</label>
+            <input type="color" id="c-outfit" value="#e8718d">
           </div>
         </div>
-        <div class="form-actions">
-          <button type="button" id="form-cancel" class="btn-secondary">Cancel</button>
-          <button type="submit" class="btn-primary">Save</button>
+      </div>
+
+      <div class="setup-nav">
+        <div></div>
+        <button class="btn-primary" id="step1-next">つぎへ →</button>
+      </div>
+    </div>
+
+    <!-- Step 2: 性格と話し方 -->
+    <div id="setup-step-2" class="setup-step">
+      <h2 class="setup-step-title">💬 性格と話し方</h2>
+
+      <div class="personality-grid" id="personality-grid"></div>
+
+      <div class="setup-form">
+        <div class="form-row">
+          <label for="s-firstPerson">一人称</label>
+          <input type="text" id="s-firstPerson" class="input-short" placeholder="わたし" maxlength="8">
         </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Random interest modal -->
-  <div id="random-overlay" class="modal-overlay hidden">
-    <div class="modal">
-      <div class="modal-header">
-        <h2>Something to explore</h2>
-        <button id="random-close" class="btn-icon" aria-label="Close">×</button>
+        <div class="form-row">
+          <label for="s-suffix">語尾（任意）</label>
+          <input type="text" id="s-suffix" class="input-short" placeholder="例: にゃ" maxlength="4">
+        </div>
       </div>
-      <div id="random-content"></div>
-      <div class="form-actions">
-        <button id="random-again" class="btn-secondary">⚄ Another</button>
-        <button id="random-done" class="btn-primary">Done</button>
+
+      <div class="setup-nav">
+        <button class="btn-secondary" id="step2-back">← もどる</button>
+        <button class="btn-primary" id="step2-next">つぎへ →</button>
       </div>
     </div>
-  </div>
 
-  <script src="app.js"></script>
+    <!-- Step 3: なまえ -->
+    <div id="setup-step-3" class="setup-step">
+      <h2 class="setup-step-title">💌 なまえをきめよう</h2>
+
+      <div class="setup-form">
+        <div class="form-row">
+          <label for="s-charName">キャラクターの名前</label>
+          <input type="text" id="s-charName" placeholder="ミナト" maxlength="12">
+        </div>
+        <div class="form-row">
+          <label for="s-playerName">あなたの名前</label>
+          <input type="text" id="s-playerName" placeholder="ぴな" maxlength="12">
+        </div>
+        <div class="form-row">
+          <label for="s-callName">キャラに呼ばれたい名前</label>
+          <input type="text" id="s-callName" placeholder="ぴな" maxlength="12">
+        </div>
+      </div>
+
+      <div class="setup-nav">
+        <button class="btn-secondary" id="step3-back">← もどる</button>
+        <button class="btn-primary" id="step3-finish">はじめる 🌸</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== メイン画面(タブ切替) ===================== -->
+<div id="screen-main" class="screen hidden">
+
+  <!-- ホーム -->
+  <section id="tab-home" class="tab-section">
+    <div id="room-bg" class="room-bg">
+      <!-- 窓と家具の CSS 装飾 -->
+      <div class="room-window">
+        <div class="room-sky"></div>
+        <div class="room-curtain left"></div>
+        <div class="room-curtain right"></div>
+      </div>
+      <div class="room-floor"></div>
+      <div class="room-desk"></div>
+      <div class="room-shelf"></div>
+    </div>
+
+    <!-- ステータスバー -->
+    <div class="status-bar">
+      <div class="status-level">
+        <span id="home-level-icon">💛</span>
+        <span id="home-level-name"></span>
+      </div>
+      <div class="status-coins">
+        <span>🪙</span><span id="home-coins"></span>
+      </div>
+      <div class="status-streak">
+        <span>🔥</span><span id="home-streak"></span>
+      </div>
+    </div>
+
+    <!-- 立ち絵+吹き出し -->
+    <div class="chara-area">
+      <div id="home-bubble" class="speech-bubble hidden">
+        <p id="home-bubble-text"></p>
+      </div>
+      <div id="home-chara" class="home-chara-img" role="button" aria-label="キャラクターをタップ"></div>
+    </div>
+
+    <!-- 今日のタスク クイックリスト -->
+    <div class="home-tasks-panel">
+      <div class="panel-header">
+        <span class="panel-title">📋 今日のタスク</span>
+        <button class="btn-link" id="home-goto-tasks">すべて見る</button>
+      </div>
+      <div id="home-task-list" class="home-task-list"></div>
+    </div>
+  </section>
+
+  <!-- タスク -->
+  <section id="tab-tasks" class="tab-section hidden">
+    <div class="page-header">
+      <h2 class="page-title">📋 タスク</h2>
+      <button class="btn-primary btn-sm" id="task-add-btn">+ 追加</button>
+    </div>
+    <div id="task-list" class="task-list"></div>
+
+    <!-- タスク追加/編集 モーダル -->
+    <div id="task-modal" class="modal-overlay hidden">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="task-modal-title">タスクを追加</h3>
+          <button class="btn-icon-close" id="task-modal-close">✕</button>
+        </div>
+        <div class="form-group">
+          <label>タイトル</label>
+          <input type="text" id="task-form-title" placeholder="例: 運動する" maxlength="40">
+        </div>
+        <div class="form-group">
+          <label>難易度</label>
+          <div class="chip-group" id="task-difficulty-select">
+            <button class="chip" data-value="easy">かんたん +10🪙</button>
+            <button class="chip active" data-value="normal">ふつう +20🪙</button>
+            <button class="chip" data-value="hard">むずかしい +40🪙</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>くりかえし</label>
+          <div class="chip-group" id="task-repeat-select">
+            <button class="chip active" data-value="none">なし</button>
+            <button class="chip" data-value="daily">毎日</button>
+            <button class="chip" data-value="weekday">曜日指定</button>
+          </div>
+        </div>
+        <div id="task-weekday-picker" class="weekday-picker hidden">
+          <button class="day-btn" data-day="mon">月</button>
+          <button class="day-btn" data-day="tue">火</button>
+          <button class="day-btn" data-day="wed">水</button>
+          <button class="day-btn" data-day="thu">木</button>
+          <button class="day-btn" data-day="fri">金</button>
+          <button class="day-btn" data-day="sat">土</button>
+          <button class="day-btn" data-day="sun">日</button>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-secondary" id="task-form-cancel">キャンセル</button>
+          <button class="btn-primary" id="task-form-save">保存</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- プレゼント -->
+  <section id="tab-shop" class="tab-section hidden">
+    <div class="page-header">
+      <h2 class="page-title">🎁 プレゼント</h2>
+      <div class="coin-display">🪙 <span id="shop-coins"></span></div>
+    </div>
+    <div id="gift-list" class="gift-grid"></div>
+  </section>
+
+  <!-- おでかけ -->
+  <section id="tab-date" class="tab-section hidden">
+    <div class="page-header">
+      <h2 class="page-title">🌸 おでかけ</h2>
+      <div class="coin-display">🪙 <span id="date-coins"></span></div>
+    </div>
+    <div id="date-spot-list" class="date-spot-list"></div>
+  </section>
+
+  <!-- きろく -->
+  <section id="tab-records" class="tab-section hidden">
+    <div class="page-header">
+      <h2 class="page-title">📖 きろく</h2>
+    </div>
+    <div class="records-content">
+      <div class="record-card affection-card">
+        <div class="record-label">しんみつど</div>
+        <div class="affection-level-name" id="rec-level-name"></div>
+        <div class="affection-bar-wrap">
+          <div class="affection-bar-bg">
+            <div id="rec-affection-bar" class="affection-bar-fill"></div>
+          </div>
+          <div class="affection-bar-labels">
+            <span id="rec-affection-cur"></span>
+            <span id="rec-affection-next"></span>
+          </div>
+        </div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-num" id="rec-total-tasks"></div>
+          <div class="stat-label">タスク完了</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="rec-total-coins"></div>
+          <div class="stat-label">獲得コイン</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="rec-total-gifts"></div>
+          <div class="stat-label">プレゼント</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="rec-total-dates"></div>
+          <div class="stat-label">おでかけ</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="rec-streak"></div>
+          <div class="stat-label">ストリーク🔥</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="rec-best-streak"></div>
+          <div class="stat-label">最高記録</div>
+        </div>
+      </div>
+      <div class="memories-section">
+        <h3 class="memories-title">💝 おもいで</h3>
+        <div id="memories-list" class="memories-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- せってい -->
+  <section id="tab-settings" class="tab-section hidden">
+    <div class="page-header">
+      <h2 class="page-title">⚙️ せってい</h2>
+    </div>
+    <div class="settings-content">
+      <div class="settings-section">
+        <h3 class="settings-section-title">キャラクターの見た目</h3>
+        <div id="settings-chara-preview" class="chara-preview small"></div>
+        <div class="setup-form">
+          <div class="form-row">
+            <label>髪型</label>
+            <div id="settings-hairStyle-select" class="chip-group"></div>
+          </div>
+          <div class="form-row">
+            <label>アクセサリー</label>
+            <div id="settings-accessory-select" class="chip-group"></div>
+          </div>
+          <div class="color-grid">
+            <div class="color-item">
+              <label for="s2-hair">髪の色</label>
+              <input type="color" id="s2-hair">
+            </div>
+            <div class="color-item">
+              <label for="s2-eye">目の色</label>
+              <input type="color" id="s2-eye">
+            </div>
+            <div class="color-item">
+              <label for="s2-skin">肌の色</label>
+              <input type="color" id="s2-skin">
+            </div>
+            <div class="color-item">
+              <label for="s2-outfit">服の色</label>
+              <input type="color" id="s2-outfit">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title">性格と話し方</h3>
+        <div class="personality-grid small" id="settings-personality-grid"></div>
+        <div class="setup-form">
+          <div class="form-row">
+            <label for="s2-firstPerson">一人称</label>
+            <input type="text" id="s2-firstPerson" class="input-short" maxlength="8">
+          </div>
+          <div class="form-row">
+            <label for="s2-suffix">語尾（任意）</label>
+            <input type="text" id="s2-suffix" class="input-short" maxlength="4">
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title">なまえ</h3>
+        <div class="setup-form">
+          <div class="form-row">
+            <label for="s2-charName">キャラの名前</label>
+            <input type="text" id="s2-charName" maxlength="12">
+          </div>
+          <div class="form-row">
+            <label for="s2-playerName">あなたの名前</label>
+            <input type="text" id="s2-playerName" maxlength="12">
+          </div>
+          <div class="form-row">
+            <label for="s2-callName">呼ばれたい名前</label>
+            <input type="text" id="s2-callName" maxlength="12">
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-primary settings-save-btn" id="settings-save">保存する</button>
+
+      <div class="settings-section danger-zone">
+        <h3 class="settings-section-title danger-title">⚠️ データリセット</h3>
+        <p class="danger-desc">すべてのデータが消えます。この操作は取り消せません。</p>
+        <button class="btn-danger" id="settings-reset">リセットする</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 下部タブバー -->
+  <nav class="tab-bar">
+    <button class="tab-btn active" data-tab="home">
+      <span class="tab-icon">🏠</span>
+      <span class="tab-label">ホーム</span>
+    </button>
+    <button class="tab-btn" data-tab="tasks">
+      <span class="tab-icon">📋</span>
+      <span class="tab-label">タスク</span>
+    </button>
+    <button class="tab-btn" data-tab="shop">
+      <span class="tab-icon">🎁</span>
+      <span class="tab-label">ショップ</span>
+    </button>
+    <button class="tab-btn" data-tab="date">
+      <span class="tab-icon">🌸</span>
+      <span class="tab-label">おでかけ</span>
+    </button>
+    <button class="tab-btn" data-tab="records">
+      <span class="tab-icon">📖</span>
+      <span class="tab-label">きろく</span>
+    </button>
+    <button class="tab-btn" data-tab="settings">
+      <span class="tab-icon">⚙️</span>
+      <span class="tab-label">せってい</span>
+    </button>
+  </nav>
+</div>
+
+<!-- ===================== デートシーン (全画面VN) ===================== -->
+<div id="screen-date-vn" class="screen hidden">
+  <div id="vn-bg" class="vn-bg"></div>
+  <div class="vn-chara-wrap">
+    <div id="vn-chara" class="vn-chara"></div>
+  </div>
+  <div class="vn-ui" id="vn-ui" role="button" aria-label="クリックで次へ">
+    <div class="vn-textbox">
+      <div class="vn-speaker" id="vn-speaker"></div>
+      <div class="vn-text" id="vn-text"></div>
+      <div class="vn-next-hint">タップして次へ ▶</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== レベルアップ演出 ===================== -->
+<div id="levelup-overlay" class="levelup-overlay hidden">
+  <div class="levelup-box">
+    <div class="levelup-sparkle" aria-hidden="true">
+      <span>✨</span><span>⭐</span><span>✨</span>
+      <span>⭐</span><span>✨</span><span>⭐</span>
+    </div>
+    <div class="levelup-title">レベルアップ！</div>
+    <div class="levelup-name" id="levelup-name"></div>
+    <div id="levelup-chara" class="levelup-chara"></div>
+    <button class="btn-primary" id="levelup-ok">やったー！</button>
+  </div>
+</div>
+
+<!-- ===================== 確認ダイアログ ===================== -->
+<div id="confirm-overlay" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="confirm-title">確認</h3>
+    </div>
+    <p id="confirm-message" class="confirm-message"></p>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="confirm-cancel">キャンセル</button>
+      <button class="btn-danger" id="confirm-ok">リセット</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/character.js"></script>
+<script src="js/gamedata.js"></script>
+<script src="js/dialogue.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>
