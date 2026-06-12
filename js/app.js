@@ -907,7 +907,16 @@ let wizardStep = 1;
 
 function initWizard() {
   wizardLook = JSON.parse(JSON.stringify(DEFAULT_STATE.character.look));
+  buildWizardControls();
 
+  // ステップドット番号
+  document.querySelectorAll('.step-dot').forEach((dot, i) => {
+    dot.textContent = i + 1;
+  });
+}
+
+/** 現在の wizardLook / wizardPersonality を UI に反映 (インポート後の再同期にも使う) */
+function buildWizardControls() {
   // Step1: 髪型チップ
   buildChipGroup('hairStyle-select', CharacterArt ? CharacterArt.HAIR_STYLES : [], wizardLook.hairStyle, v => {
     wizardLook.hairStyle = v;
@@ -920,7 +929,7 @@ function initWizard() {
     renderWizardPreview();
   });
 
-  // カラーピッカー
+  // カラーピッカー (再実行されるため oninput 代入で多重登録を避ける)
   const colorIds = [
     ['c-hair',   'hairColor'],
     ['c-eye',    'eyeColor'],
@@ -931,23 +940,17 @@ function initWizard() {
     const el = document.getElementById(id);
     if (!el) return;
     el.value = wizardLook[key];
-    el.addEventListener('input', () => {
+    el.oninput = () => {
       wizardLook[key] = el.value;
       renderWizardPreview();
-    });
+    };
   });
 
-  // プレビュー初期描画
   renderWizardPreview();
 
   // Step2: 性格
   buildPersonalityGrid('personality-grid', wizardPersonality, v => {
     wizardPersonality = v;
-  });
-
-  // ステップドット番号
-  document.querySelectorAll('.step-dot').forEach((dot, i) => {
-    dot.textContent = i + 1;
   });
 }
 
@@ -1070,6 +1073,254 @@ function buildPersonalityGrid(containerId, activeValue, onSelect) {
   });
 }
 
+// ─── キャラクターインポート (チャットで相談 → JSON 取り込み) ──────
+// AI チャットに相談用プロンプトを貼ってキャラを作り、出力された JSON を
+// インポートする。FocusFlow のクリップボードインポートと同じ思想。
+let importContext = 'settings'; // 'settings' | 'setup'
+let importedCharacter = null;   // 検証済みのインポート候補
+
+/** AI チャットに貼る相談用プロンプト (選択肢はデータから動的生成) */
+function buildCharPrompt() {
+  const hairs = (typeof CharacterArt !== 'undefined' ? CharacterArt.HAIR_STYLES : [])
+    .map(h => `${h.id}(${h.name})`).join(' / ');
+  const accs = (typeof CharacterArt !== 'undefined' ? CharacterArt.ACCESSORIES : [])
+    .map(a => `${a.id}(${a.name})`).join(' / ');
+  const pers = Object.keys(PERSONALITY_NAMES)
+    .map(p => `${p}(${PERSONALITY_NAMES[p]}: ${PERSONALITY_DESCS[p]})`).join('\n  - ');
+
+  return `あなたはキャラクターデザイナーです。わたしのタスク管理アプリ「いっしょぐらし」に住んでくれるキャラクターを、会話で相談しながら一緒に作ってください。見た目・性格・話し方の希望を聞いて、提案してください。
+
+キャラが決まったら、最後に次の形式の JSON をコードブロックで 1 つだけ出力してください。
+
+{
+  "name": "キャラの名前",
+  "personality": "tsundere",
+  "firstPerson": "わたし",
+  "callName": "キャラがわたしを呼ぶ名前",
+  "suffix": "",
+  "look": {
+    "hairStyle": "long",
+    "hairColor": "#6b4f3a",
+    "eyeColor": "#4a6fa5",
+    "skinTone": "#ffe3cf",
+    "outfitColor": "#e8718d",
+    "accessory": "none"
+  }
+}
+
+制約:
+- personality は次のどれか:
+  - ${pers}
+- look.hairStyle: ${hairs}
+- look.accessory: ${accs}
+- 色は #rrggbb 形式
+- name と callName は 12 文字以内、firstPerson は一人称で 8 文字以内
+- suffix は語尾 (例「にゃ」) で 4 文字以内。不要なら ""`;
+}
+
+/** チャット出力の揺れを吸収して JSON を取り出す */
+function parseCharacterJSON(text) {
+  let t = String(text || '')
+    // スマート引用符の正規化 (アプリ版チャット対策)
+    .replace(/[\u201C\u201D\u201E\u201F\u2033\u2036\uFF02]/g, '"')
+    .replace(/[\u2018\u2019\u201A\u201B\u2032\u2035\uFF07]/g, "'");
+  // コードフェンスや前後の文章を除いて最初の { から最後の } までを抜き出す
+  const start = t.indexOf('{');
+  const end = t.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) throw new Error('JSON が見つかりません');
+  return JSON.parse(t.slice(start, end + 1));
+}
+
+/** インポート候補を検証して正規化。{ ok, character } or { ok:false, error } */
+function validateCharacterImport(obj) {
+  if (!obj || typeof obj !== 'object') return { ok: false, error: 'JSON の形式が正しくありません' };
+  const errors = [];
+
+  const name = String(obj.name || '').trim().slice(0, 12);
+  if (!name) errors.push('name (キャラの名前) がありません');
+
+  const personality = String(obj.personality || '');
+  if (!PERSONALITY_NAMES[personality]) {
+    errors.push(`personality は ${Object.keys(PERSONALITY_NAMES).join(' / ')} のどれかにしてください`);
+  }
+
+  const look = obj.look || {};
+  const defLook = DEFAULT_STATE.character.look;
+  const hairIds = (typeof CharacterArt !== 'undefined' ? CharacterArt.HAIR_STYLES : []).map(h => h.id);
+  const accIds  = (typeof CharacterArt !== 'undefined' ? CharacterArt.ACCESSORIES : []).map(a => a.id);
+  const hairStyle = hairIds.includes(look.hairStyle) ? look.hairStyle : null;
+  if (look.hairStyle && !hairStyle) errors.push(`hairStyle は ${hairIds.join(' / ')} のどれかにしてください`);
+  const accessory = accIds.includes(look.accessory) ? look.accessory : (look.accessory ? null : 'none');
+  if (look.accessory && accessory === null) errors.push(`accessory は ${accIds.join(' / ')} のどれかにしてください`);
+
+  // 色は #hex のみ受け付ける (SVG に埋め込むため厳格に)
+  const hexRe = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+  const color = (key) => {
+    const v = look[key];
+    if (v == null || v === '') return defLook[key];
+    if (typeof v === 'string' && hexRe.test(v.trim())) return v.trim();
+    errors.push(`${key} は #rrggbb 形式の色にしてください`);
+    return defLook[key];
+  };
+  const hairColor = color('hairColor');
+  const eyeColor = color('eyeColor');
+  const skinTone = color('skinTone');
+  const outfitColor = color('outfitColor');
+
+  if (errors.length) return { ok: false, error: errors.join('\n') };
+
+  return {
+    ok: true,
+    character: {
+      name,
+      personality,
+      firstPerson: String(obj.firstPerson || 'わたし').trim().slice(0, 8) || 'わたし',
+      callName: String(obj.callName || '').trim().slice(0, 12), // 空なら適用時に現状維持
+      suffix: String(obj.suffix || '').trim().slice(0, 4),
+      look: {
+        hairStyle: hairStyle || defLook.hairStyle,
+        hairColor, eyeColor, skinTone, outfitColor,
+        accessory: accessory || 'none'
+      }
+    }
+  };
+}
+
+function openCharPromptModal() {
+  const modal = document.getElementById('char-prompt-modal');
+  const ta = document.getElementById('char-prompt-text');
+  if (!modal || !ta) return;
+  ta.value = buildCharPrompt();
+  modal.classList.remove('hidden');
+}
+
+function copyCharPrompt() {
+  const ta = document.getElementById('char-prompt-text');
+  if (!ta) return;
+  const done = () => showToast('📋 コピーしました');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(ta.value).then(done).catch(() => {
+      ta.select();
+      document.execCommand('copy');
+      done();
+    });
+  } else {
+    ta.select();
+    document.execCommand('copy');
+    done();
+  }
+}
+
+function openCharImportModal(context) {
+  importContext = context || 'settings';
+  importedCharacter = null;
+  const modal = document.getElementById('char-import-modal');
+  if (!modal) return;
+  document.getElementById('char-import-text').value = '';
+  document.getElementById('char-import-error').classList.add('hidden');
+  document.getElementById('char-import-preview').classList.add('hidden');
+  document.getElementById('char-import-apply').disabled = true;
+  modal.classList.remove('hidden');
+  setTimeout(() => document.getElementById('char-import-text').focus(), 100);
+}
+
+function closeCharImportModal() {
+  const modal = document.getElementById('char-import-modal');
+  if (modal) modal.classList.add('hidden');
+  importedCharacter = null;
+}
+
+/** 貼り付け内容を解析してプレビュー更新 */
+function refreshCharImportPreview() {
+  const text = document.getElementById('char-import-text').value;
+  const errEl = document.getElementById('char-import-error');
+  const prevEl = document.getElementById('char-import-preview');
+  const applyBtn = document.getElementById('char-import-apply');
+  importedCharacter = null;
+  applyBtn.disabled = true;
+
+  if (!text.trim()) {
+    errEl.classList.add('hidden');
+    prevEl.classList.add('hidden');
+    return;
+  }
+
+  let result;
+  try {
+    result = validateCharacterImport(parseCharacterJSON(text));
+  } catch (e) {
+    result = { ok: false, error: 'JSON を読み取れませんでした。コードブロックごと貼り付けても大丈夫です。' };
+  }
+
+  if (!result.ok) {
+    errEl.textContent = result.error;
+    errEl.classList.remove('hidden');
+    prevEl.classList.add('hidden');
+    return;
+  }
+
+  const ch = result.character;
+  importedCharacter = ch;
+  errEl.classList.add('hidden');
+  prevEl.classList.remove('hidden');
+
+  // プレビュー: 立ち絵+名前+性格+その子の声のサンプル
+  const artEl = document.getElementById('char-import-preview-art');
+  if (artEl && typeof CharacterArt !== 'undefined') {
+    artEl.innerHTML = CharacterArt.render(ch.look, 'smile');
+  }
+  document.getElementById('char-import-preview-name').textContent = ch.name;
+  const meta = [PERSONALITY_NAMES[ch.personality], `一人称「${ch.firstPerson}」`];
+  if (ch.suffix) meta.push(`語尾「${ch.suffix}」`);
+  document.getElementById('char-import-preview-meta').textContent = meta.join(' · ');
+  const sampleState = {
+    affection: state ? state.affection : 0,
+    character: Object.assign({}, ch, { callName: ch.callName || (state ? state.character.callName : 'あなた') })
+  };
+  const line = (typeof Dialogue !== 'undefined') ? Dialogue.get('setup_first', sampleState) : '';
+  document.getElementById('char-import-preview-line').textContent = line ? `「${line}」` : '';
+
+  applyBtn.disabled = false;
+}
+
+/** インポートを適用 (せってい: 即反映 / セットアップ: ウィザードに流し込み) */
+function applyCharImport() {
+  if (!importedCharacter) return;
+  const ch = importedCharacter;
+
+  if (importContext === 'setup') {
+    wizardLook = Object.assign({}, ch.look);
+    wizardPersonality = ch.personality;
+    buildWizardControls();
+    const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    setVal('s-firstPerson', ch.firstPerson);
+    setVal('s-suffix', ch.suffix);
+    setVal('s-charName', ch.name);
+    if (ch.callName) setVal('s-callName', ch.callName);
+    closeCharImportModal();
+    goToStep(3); // 名前の確認だけして完了へ
+    showToast(`💞 ${ch.name}が来ました`);
+    return;
+  }
+
+  // せってい: そのまま反映
+  state.character.name = ch.name;
+  state.character.personality = ch.personality;
+  state.character.firstPerson = ch.firstPerson;
+  state.character.suffix = ch.suffix;
+  if (ch.callName) state.character.callName = ch.callName;
+  state.character.look = Object.assign({}, ch.look);
+  saveState();
+
+  closeCharImportModal();
+  renderChara('home-chara', 'smile');
+  initSettingsTab();
+  showToast(`💞 ${ch.name}が来ました`);
+  const speech = getSpeech('setup_first');
+  showBubble(speech);
+  switchTab('home');
+}
+
 // ─── タブ切替 ────────────────────────────────────────────────
 let currentTab = 'home';
 
@@ -1142,6 +1393,26 @@ function bindEvents() {
   // せってい: 保存
   const settingsSave = document.getElementById('settings-save');
   if (settingsSave) settingsSave.addEventListener('click', saveSettings);
+
+  // キャラインポート関連
+  const bind = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+  bind('char-prompt-btn',   openCharPromptModal);
+  bind('char-prompt-close', () => document.getElementById('char-prompt-modal').classList.add('hidden'));
+  bind('char-prompt-copy',  copyCharPrompt);
+  bind('char-import-btn',   () => openCharImportModal('settings'));
+  bind('wizard-import-btn', () => openCharImportModal('setup'));
+  bind('char-import-close', closeCharImportModal);
+  bind('char-import-cancel', closeCharImportModal);
+  bind('char-import-apply', applyCharImport);
+  const importText = document.getElementById('char-import-text');
+  if (importText) importText.addEventListener('input', refreshCharImportPreview);
+  // モーダル外クリックで閉じる
+  ['char-prompt-modal', 'char-import-modal'].forEach(id => {
+    const overlay = document.getElementById(id);
+    if (overlay) overlay.addEventListener('click', e => {
+      if (e.target === overlay) overlay.classList.add('hidden');
+    });
+  });
 
   // せってい: リセット
   const settingsReset = document.getElementById('settings-reset');

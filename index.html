@@ -32,6 +32,9 @@
       <div class="setup-preview-wrap">
         <div id="setup-chara-preview" class="chara-preview"></div>
       </div>
+      <div class="wizard-import-row">
+        <button class="btn-link" id="wizard-import-btn">💬 チャットで作った子をインポート</button>
+      </div>
 
       <div class="setup-form">
         <div class="form-row">
@@ -359,6 +362,15 @@
 
       <button class="btn-primary settings-save-btn" id="settings-save">保存する</button>
 
+      <div class="settings-section">
+        <h3 class="settings-section-title">チャットでキャラを作る</h3>
+        <p class="import-desc">AIチャットに相談用プロンプトを貼ってキャラクターを一緒に考え、出てきたJSONをインポートできます。</p>
+        <div class="import-btn-row">
+          <button class="btn-secondary" id="char-prompt-btn">📋 相談用プロンプト</button>
+          <button class="btn-primary" id="char-import-btn">📥 インポート</button>
+        </div>
+      </div>
+
       <div class="settings-section danger-zone">
         <h3 class="settings-section-title danger-title">⚠️ データリセット</h3>
         <p class="danger-desc">すべてのデータが消えます。この操作は取り消せません。</p>
@@ -439,6 +451,45 @@
   </div>
 </div>
 
+
+<!-- ===================== キャラ相談プロンプト ===================== -->
+<div id="char-prompt-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>相談用プロンプト</h3>
+      <button class="btn-icon-close" id="char-prompt-close">✕</button>
+    </div>
+    <p class="import-desc">これをコピーしてAIチャットに貼り、キャラクターを相談してください。最後に出てくるJSONを「インポート」で取り込めます。</p>
+    <textarea id="char-prompt-text" class="import-textarea" readonly rows="9"></textarea>
+    <div class="modal-actions">
+      <button class="btn-primary" id="char-prompt-copy">コピーする</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== キャラインポート ===================== -->
+<div id="char-import-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>キャラクターをインポート</h3>
+      <button class="btn-icon-close" id="char-import-close">✕</button>
+    </div>
+    <textarea id="char-import-text" class="import-textarea" rows="6" placeholder="チャットで出力されたJSONをここに貼り付け"></textarea>
+    <p id="char-import-error" class="import-error hidden"></p>
+    <div id="char-import-preview" class="import-preview hidden">
+      <div id="char-import-preview-art" class="chara-preview small"></div>
+      <div class="import-preview-info">
+        <div id="char-import-preview-name" class="import-preview-name"></div>
+        <div id="char-import-preview-meta" class="import-preview-meta"></div>
+        <p id="char-import-preview-line" class="import-preview-line"></p>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="char-import-cancel">キャンセル</button>
+      <button class="btn-primary" id="char-import-apply" disabled>この子をむかえる</button>
+    </div>
+  </div>
+</div>
 
 <!-- ===================== FocusFlow サブ画面 (グループ/集中/編集) ===================== -->
 <div class="ffx" id="ffx-overlays">
