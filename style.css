@@ -2580,3 +2580,25 @@ input[type="color"] {
   padding: 4px;
 }
 .date-add-btn { width: 100%; margin-top: 4px; }
+
+/* 部分インポート (セリフ/台本) */
+.pi-summary {
+  font-size: 12px;
+  color: var(--text-soft);
+  background: var(--mint);
+  border-radius: var(--r-md);
+  padding: 8px 12px;
+  margin-top: 8px;
+  line-height: 1.6;
+}
+.pi-summary.hidden { display: none; }
+.de-footer {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1.5px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.de-footer.hidden { display: none; }
+.de-footer > button { flex: 1; font-size: 12px; }

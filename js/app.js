@@ -841,7 +841,11 @@ function renderDateSpots() {
       <button class="spot-edit-btn" data-id="${esc(spot.id)}" aria-label="シナリオを編集">✏️</button>
     </div>`;
   }).join('') + `
-    <button class="btn-secondary date-add-btn" id="date-add-btn">＋ あたらしいおでかけ先をつくる</button>`;
+    <button class="btn-secondary date-add-btn" id="date-add-btn">＋ あたらしいおでかけ先をつくる</button>
+    <div class="import-btn-row" style="margin-top:8px">
+      <button class="btn-secondary" id="date-prompt-btn">💬 相談プロンプト</button>
+      <button class="btn-secondary" id="date-import-btn">📥 台本をインポート</button>
+    </div>`;
 
   container.querySelectorAll('.go-btn:not([disabled])').forEach(btn => {
     btn.addEventListener('click', () => startDate(btn.dataset.id));
@@ -851,6 +855,10 @@ function renderDateSpots() {
   });
   const addBtn = document.getElementById('date-add-btn');
   if (addBtn) addBtn.addEventListener('click', () => openDateEditor(null));
+  const dpBtn = document.getElementById('date-prompt-btn');
+  if (dpBtn) dpBtn.addEventListener('click', () => openPromptModal('dates'));
+  const diBtn = document.getElementById('date-import-btn');
+  if (diBtn) diBtn.addEventListener('click', () => openPartialImport('dates'));
 }
 
 /** 標準スポット (customDates の同 id で上書き) + 自作スポット */
@@ -1956,6 +1964,7 @@ function dePresetLines(sitId) {
 function openDialogueEditor() {
   deRenderList();
   document.getElementById('de-list').classList.remove('hidden');
+  document.getElementById('de-list-footer').classList.remove('hidden');
   document.getElementById('de-detail').classList.add('hidden');
   document.getElementById('de-title').textContent = `${state.character.name}のセリフ`;
   document.getElementById('dialogue-editor').classList.remove('hidden');
@@ -1992,6 +2001,7 @@ function deOpenSit(sitId) {
   deRenderLines(deGetPool(sitId) || []);
   document.getElementById('de-preview').textContent = '';
   document.getElementById('de-list').classList.add('hidden');
+  document.getElementById('de-list-footer').classList.add('hidden');
   document.getElementById('de-detail').classList.remove('hidden');
 }
 
@@ -2089,6 +2099,271 @@ function deBackToList() {
   deRenderList();
   document.getElementById('de-detail').classList.add('hidden');
   document.getElementById('de-list').classList.remove('hidden');
+  document.getElementById('de-list-footer').classList.remove('hidden');
+}
+
+// ─── 部分インポート (セリフ集 / デート台本を既存キャラに追加) ──────
+// キャラ作成後でも、AI チャットに書いてもらったセリフやデート台本だけを
+// 取り込める。キャラ本体 (見た目・名前など) は変更しない。
+let partialImportMode = 'dialogue'; // 'dialogue' | 'dates'
+let partialImportPayload = null;    // 検証済みの適用待ちデータ
+
+/** いまの子のプロフィール説明 (相談プロンプトに埋め込む) */
+function charProfileForPrompt() {
+  const ch = state.character;
+  const lines = [];
+  lines.push(`- 名前: ${ch.name}`);
+  if (ch.personality === 'custom') {
+    lines.push(`- 性格: ${ch.customLabel || 'カスタム'}(ベース: ${PERSONALITY_NAMES[ch.basePersonality] || 'クール'})`);
+  } else {
+    lines.push(`- 性格: ${PERSONALITY_NAMES[ch.personality]}(${PERSONALITY_DESCS[ch.personality] || ''})`);
+  }
+  lines.push(`- 一人称: ${ch.firstPerson} / わたしの呼び方: ${ch.callName}`);
+  if (ch.suffix) lines.push(`- 語尾: 「${ch.suffix}」(アプリ側で自動付与するのでセリフには書かない)`);
+  // 声のサンプル (カスタムセリフがあれば優先)
+  const samples = [];
+  const cd = ch.customDialogue;
+  if (cd) {
+    const firstLine = (pool) => {
+      const arr = Array.isArray(pool) ? pool : (pool && (pool.low || pool.mid || pool.high));
+      return arr && arr[0];
+    };
+    // よく書かれている場面を優先しつつ、何でもいいので最大 3 本拾う
+    const sits = ['idle', 'task_complete', 'setup_first']
+      .concat(Object.keys(cd).filter(k => k !== 'praise'));
+    sits.forEach(sit => {
+      const line = firstLine(cd[sit]);
+      if (line && samples.length < 3 && !samples.includes(line)) samples.push(line);
+    });
+  }
+  if (!samples.length && typeof Dialogue !== 'undefined') {
+    const p = Dialogue.resolvePersonality(state);
+    const idle = (Dialogue.DIALOGUE[p] || {}).idle;
+    if (idle && idle.low) samples.push(idle.low[0]);
+  }
+  if (samples.length) {
+    lines.push('- 話し方のサンプル:');
+    samples.forEach(l => lines.push(`  「${l}」`));
+  }
+  return lines.join('\n');
+}
+
+/** セリフ集の相談プロンプト */
+function buildDialoguePrompt() {
+  return `あなたはシナリオライターです。わたしのタスク管理アプリ「いっしょぐらし」に住んでいるキャラクターの追加セリフを書いてください。
+
+キャラのプロフィール:
+${charProfileForPrompt()}
+
+書いてほしい場面を相談して決めたら、最後に次の形式の JSON をコードブロックで 1 つだけ出力してください。書いた場面だけが上書きされ、他はそのまま残ります。
+
+{
+  "dialogue": {
+    "idle": ["セリフ1", "セリフ2", "…(2〜5本)"],
+    "task_complete": { "low": ["…"], "mid": ["…"], "high": ["…"] }
+  }
+}
+
+場面名 (好きなものだけで OK):
+- greeting_morning / greeting_day / greeting_evening / greeting_night … 時間帯の挨拶
+- task_add({task} 可) / task_complete({task} 可) / all_done
+- idle … 立ち絵タップの雑談 (多めに 5 本ほしい)
+- has_overdue / comeback / levelup / setup_first
+- gift_reaction … プレゼントへの反応 ({gift} 可)
+- praise … {"int":[…],"fit":[…],"life":[…],"sense":[…],"grit":[…]} (知性/体力/生活力/感性/根性を褒める)
+
+ルール:
+- 文字列配列なら親密度に関係なく使われる。{"low":[…],"mid":[…],"high":[…]} なら親密度段階別 (low=出会った頃 / high=心を許した仲)
+- {user} はわたしの呼び名、{me} はキャラの一人称に置き換わる
+- 1 本 200 文字以内・1 場面 10 本まで`;
+}
+
+/** デート台本の相談プロンプト */
+function buildDatesPrompt() {
+  const bgs = DATE_BG_OPTIONS.map(b => `${b.id}(${b.name})`).join(' / ');
+  return `あなたはシナリオライターです。わたしのタスク管理アプリ「いっしょぐらし」の、キャラクターとのおでかけ(デート)シーンの台本を書いてください。
+
+キャラのプロフィール:
+${charProfileForPrompt()}
+
+行き先を相談して決めたら、最後に次の形式の JSON をコードブロックで 1 つだけ出力してください (1〜3 件)。
+
+{
+  "dates": [
+    {
+      "name": "星空の丘",
+      "icon": "🌌",
+      "price": 200,
+      "minLevel": 2,
+      "affection": 30,
+      "bgClass": "vn-cinema",
+      "script": [
+        { "speaker": "narration", "text": "ふたりは丘の上にやってきた。" },
+        { "speaker": "char", "text": "わぁ…星がきれいだね、{user}。" }
+      ]
+    }
+  ]
+}
+
+ルール:
+- script は 4〜12 コマ。speaker は "char"(キャラのセリフ) か "narration"(地の文)。1 コマ 300 文字以内
+- {user} はわたしの呼び名、{me} はキャラの一人称に置き換わる
+- bgClass は背景: ${bgs}
+- name 12 文字以内 / icon は絵文字 1 つ / price 0〜9999 / affection (ごほうび親密度) 0〜100 / minLevel 1〜6
+- 標準スポットを置き換えたいときだけ "id" を付ける: cafe(カフェ) / movie(映画館) / aquarium(水族館) / amusement(遊園地) / onsen(温泉旅行)`;
+}
+
+/** デート台本インポートの検証。{ ok, dates } or { ok:false, error } */
+function validateDateImport(obj) {
+  let list = obj && obj.dates ? obj.dates : obj;
+  if (list && !Array.isArray(list) && typeof list === 'object' && list.script) list = [list];
+  if (!Array.isArray(list) || !list.length) {
+    return { ok: false, error: 'dates (おでかけ先の配列) が見つかりません' };
+  }
+  if (list.length > 5) return { ok: false, error: '一度にインポートできるのは 5 件までです' };
+  const bgIds = DATE_BG_OPTIONS.map(b => b.id);
+  const builtinIds = (typeof GameData !== 'undefined') ? GameData.DATE_SPOTS.map(b => b.id) : [];
+  const errors = [];
+  const dates = [];
+  list.forEach((d, i) => {
+    const tag = `dates[${i}]`;
+    const name = String(d.name || '').trim().slice(0, 12);
+    if (!name) { errors.push(`${tag}: name がありません`); return; }
+    const beats = Array.isArray(d.script) ? d.script
+      .map(b => ({
+        speaker: b.speaker === 'narration' ? 'narration' : 'char',
+        text: String(b.text || (typeof b.lines === 'string' ? b.lines : '') || '').trim().slice(0, 300)
+      }))
+      .filter(b => b.text)
+      .slice(0, 12) : [];
+    if (!beats.length) { errors.push(`${tag}: script (台本) がありません`); return; }
+    let id = String(d.id || '').trim();
+    if (id && !builtinIds.includes(id) && !state.customDates.some(c => c.id === id)) {
+      id = ''; // 不明な id は新規扱い
+    }
+    const spot = {
+      id: id || ('cd-' + uid()),
+      name,
+      icon: String(d.icon || '🌟').trim().slice(0, 4) || '🌟',
+      price: Math.max(0, Math.min(9999, parseInt(d.price, 10) || 0)),
+      affection: Math.max(0, Math.min(100, parseInt(d.affection, 10) || 0)),
+      minLevel: Math.max(1, Math.min(6, parseInt(d.minLevel, 10) || 1)),
+      bgClass: bgIds.includes(d.bgClass) ? d.bgClass : 'vn-cafe',
+      script: beats
+    };
+    const builtin = (typeof GameData !== 'undefined') && GameData.DATE_SPOTS.find(b => b.id === spot.id);
+    if (builtin && builtin.statReq) spot.statReq = builtin.statReq;
+    dates.push(spot);
+  });
+  if (errors.length) return { ok: false, error: errors.join('\n') };
+  return { ok: true, dates };
+}
+
+function openPartialImport(mode) {
+  partialImportMode = mode;
+  partialImportPayload = null;
+  const modal = document.getElementById('partial-import-modal');
+  document.getElementById('pi-title').textContent =
+    mode === 'dialogue' ? 'セリフをインポート' : 'デート台本をインポート';
+  document.getElementById('pi-desc').textContent = mode === 'dialogue'
+    ? 'AIチャットが出力した {"dialogue": {…}} 形式の JSON を貼り付けてください。書いてある場面だけ上書きされます。'
+    : 'AIチャットが出力した {"dates": […]} 形式の JSON を貼り付けてください。';
+  document.getElementById('pi-text').value = '';
+  document.getElementById('pi-error').classList.add('hidden');
+  document.getElementById('pi-summary').classList.add('hidden');
+  document.getElementById('pi-apply').disabled = true;
+  modal.classList.remove('hidden');
+  setTimeout(() => document.getElementById('pi-text').focus(), 100);
+}
+
+function refreshPartialImport() {
+  const text = document.getElementById('pi-text').value;
+  const errEl = document.getElementById('pi-error');
+  const sumEl = document.getElementById('pi-summary');
+  const applyBtn = document.getElementById('pi-apply');
+  partialImportPayload = null;
+  applyBtn.disabled = true;
+  errEl.classList.add('hidden');
+  sumEl.classList.add('hidden');
+  if (!text.trim()) return;
+
+  let obj;
+  try {
+    obj = parseCharacterJSON(text); // コードフェンス・スマート引用符に寛容なパーサを共用
+  } catch (e) {
+    errEl.textContent = 'JSON を読み取れませんでした。コードブロックごと貼り付けても大丈夫です。';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  if (partialImportMode === 'dialogue') {
+    const pack = obj.dialogue || obj;
+    const res = validateCustomDialogue(pack);
+    if (!res.ok) {
+      errEl.textContent = res.error;
+      errEl.classList.remove('hidden');
+      return;
+    }
+    partialImportPayload = res.dialogue;
+    const sits = Object.keys(res.dialogue).filter(k => k !== 'praise');
+    const labels = sits.map(sit => {
+      const m = DIALOGUE_EDIT_META.find(x => x.id === sit);
+      return m ? m.label : sit;
+    });
+    if (res.dialogue.praise) {
+      Object.keys(res.dialogue.praise).forEach(pid => {
+        const m = DIALOGUE_EDIT_META.find(x => x.id === 'praise:' + pid);
+        if (m) labels.push(m.label);
+      });
+    }
+    sumEl.textContent = `✅ ${labels.length} 場面のセリフ: ${labels.join(' / ')}`;
+  } else {
+    const res = validateDateImport(obj);
+    if (!res.ok) {
+      errEl.textContent = res.error;
+      errEl.classList.remove('hidden');
+      return;
+    }
+    partialImportPayload = res.dates;
+    sumEl.textContent = '✅ ' + res.dates.map(d =>
+      `${d.icon}${d.name}(${d.script.length}コマ・🪙${d.price}・Lv${d.minLevel})`).join(' / ');
+  }
+  sumEl.classList.remove('hidden');
+  applyBtn.disabled = false;
+}
+
+function applyPartialImport() {
+  if (!partialImportPayload) return;
+  if (partialImportMode === 'dialogue') {
+    const cd = state.character.customDialogue || {};
+    const incoming = partialImportPayload;
+    // praise はサブキー単位でマージ、それ以外は場面単位で上書き
+    const mergedPraise = Object.assign({}, cd.praise, incoming.praise);
+    state.character.customDialogue = Object.assign({}, cd, incoming);
+    if (Object.keys(mergedPraise).length) state.character.customDialogue.praise = mergedPraise;
+    saveState();
+    showToast('💾 セリフを取り込みました');
+    if (!document.getElementById('dialogue-editor').classList.contains('hidden')) deRenderList();
+  } else {
+    let added = 0;
+    for (const spot of partialImportPayload) {
+      const idx = state.customDates.findIndex(c => c.id === spot.id);
+      if (idx >= 0) {
+        state.customDates[idx] = spot;
+      } else if (state.customDates.length >= DATE_CUSTOM_MAX) {
+        showToast(`カスタムは${DATE_CUSTOM_MAX}件まで。一部を取り込めませんでした`);
+        break;
+      } else {
+        state.customDates.push(spot);
+      }
+      added++;
+    }
+    saveState();
+    renderDateSpots();
+    showToast(`💾 ${added}件のおでかけ先を取り込みました`);
+  }
+  document.getElementById('partial-import-modal').classList.add('hidden');
+  partialImportPayload = null;
 }
 
 // ─── キャラクターインポート (チャットで相談 → JSON 取り込み) ──────
@@ -2330,12 +2605,18 @@ function validateCharacterImport(obj) {
   };
 }
 
-function openCharPromptModal() {
+function openPromptModal(kind) {
   const modal = document.getElementById('char-prompt-modal');
   const ta = document.getElementById('char-prompt-text');
   if (!modal || !ta) return;
-  ta.value = buildCharPrompt();
+  ta.value = kind === 'dialogue' ? buildDialoguePrompt()
+    : kind === 'dates' ? buildDatesPrompt()
+    : buildCharPrompt();
   modal.classList.remove('hidden');
+}
+
+function openCharPromptModal() {
+  openPromptModal('char');
 }
 
 function copyCharPrompt() {
@@ -2629,6 +2910,19 @@ function bindEvents() {
   bind('de-try',   deTry);
   bind('de-save',  deSave);
   bind('de-reset', deResetSit);
+  bind('de-prompt-btn', () => openPromptModal('dialogue'));
+  bind('de-import-btn', () => openPartialImport('dialogue'));
+
+  // 部分インポートモーダル
+  bind('pi-close',  () => document.getElementById('partial-import-modal').classList.add('hidden'));
+  bind('pi-cancel', () => document.getElementById('partial-import-modal').classList.add('hidden'));
+  bind('pi-apply',  applyPartialImport);
+  const piText = document.getElementById('pi-text');
+  if (piText) piText.addEventListener('input', refreshPartialImport);
+  const piModal = document.getElementById('partial-import-modal');
+  if (piModal) piModal.addEventListener('click', e => {
+    if (e.target === piModal) piModal.classList.add('hidden');
+  });
   // モーダル外クリックで閉じる
   ['char-prompt-modal', 'char-import-modal'].forEach(id => {
     const overlay = document.getElementById(id);

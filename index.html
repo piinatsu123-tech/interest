@@ -470,6 +470,10 @@
     <div class="de-title" id="de-title">セリフを編集</div>
   </div>
   <div class="de-body" id="de-list"></div>
+  <div class="de-footer" id="de-list-footer">
+    <button class="btn-secondary" id="de-prompt-btn">💬 相談プロンプト</button>
+    <button class="btn-primary" id="de-import-btn">📥 セリフをインポート</button>
+  </div>
   <div class="de-body hidden" id="de-detail">
     <p class="de-hint" id="de-hint"></p>
     <div id="de-lines" class="de-lines"></div>
@@ -592,6 +596,24 @@
     <div class="modal-actions">
       <button class="btn-secondary" id="char-import-cancel">キャンセル</button>
       <button class="btn-primary" id="char-import-apply" disabled>この子をむかえる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 部分インポート (セリフ/デート台本) ===================== -->
+<div id="partial-import-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="pi-title">インポート</h3>
+      <button class="btn-icon-close" id="pi-close">✕</button>
+    </div>
+    <p class="import-desc" id="pi-desc"></p>
+    <textarea id="pi-text" class="import-textarea" rows="6" placeholder="AIチャットが出力したJSONをここに貼り付け"></textarea>
+    <p id="pi-error" class="import-error hidden"></p>
+    <p id="pi-summary" class="pi-summary hidden"></p>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="pi-cancel">キャンセル</button>
+      <button class="btn-primary" id="pi-apply" disabled>取り込む</button>
     </div>
   </div>
 </div>
