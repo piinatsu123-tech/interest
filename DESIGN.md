@@ -161,6 +161,27 @@ SPA。`<section>` 切り替え方式。ナビは下部タブバー。
 - **日付ロールオーバー**(起動時と `visibilitychange` で判定): `lastVisit` と今日が違えば、繰り返しタスクの `done` をリセット(曜日指定は該当曜日のみ表示対象)。単発タスクの完了済みは非表示化(アーカイブ)。2 日以上空いていたら挨拶を `comeback` に差し替え
 - **表情の使い分け**: 通常 normal/smile、完了 joy、プレゼント joy/blush、has_overdue は pout/sad、夜 sleepy など状況に連動
 
+## FocusFlow 連携(app.js)
+
+同じユーザーの別アプリ **FocusFlow**(`piinatsu123-tech/focusflow1`)とタスクを連携する。
+両アプリが同一オリジン(例: `https://piinatsu123-tech.github.io/` 配下)で公開されている前提で、
+FocusFlow の localStorage キー **`ff-tasks`** を直接読み書きする。バックエンド不要。
+
+- **タスク形式**: `{ id, text, done, urgency: 'must'|'want'|'nice'|'scheduled', steps, estimate }`
+- **表示**: ホームのクイックリストとタスクタブに「⚡ FocusFlow」セクションとして未完了分を表示。
+  `scheduled`(後日実行予定)は除外。編集・削除は FocusFlow 側で行う(こちらは完了のみ)
+- **報酬マッピング**: `must`→hard / `want`→normal / `nice`→easy(ECONOMY 準拠)
+- **こちらで完了**: `ff-tasks` に `done: true` を書き戻し(steps も done に)、FocusFlow 本体の
+  `save()` と同様に Worker `/sync` へも best-effort で POST(LINE の「一覧」用)
+- **FocusFlow 側で完了**: 起動時(800ms 遅延)・`visibilitychange`・`storage` イベントで検知し、
+  まとめて報酬付与+キャラのリアクション。付与済み ID は `state.ff.rewardedIds` で管理し、
+  FocusFlow 側で削除されたタスクの ID は掃除する
+- **初回連携時**: その時点で完了済みのタスクは報酬対象にしない(`state.ff.initialized`)
+- **全完了判定**: ネイティブ+FocusFlow(非 scheduled)の合算。`handleAllDone` は
+  `lastAllDoneDate === today` なら何もしない(同日二重付与防止)
+- **せってい**: 連携オン/オフのトグルと接続状態の表示。`ff-tasks` キーが無い環境では
+  自動的に無効(状態スキーマに `ff: { enabled, initialized, rewardedIds }` を追加)
+
 ## ビジュアルトーン
 
 - 暖かみのあるパステル系。角丸大きめ、影は柔らかく。フォントは system-ui 系で可
