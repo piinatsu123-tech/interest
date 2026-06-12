@@ -70,6 +70,8 @@ const DEFAULT_STATE = {
   },
   affection: 0,
   coins: 0,
+  // 自分のパラメーター (ときメモ式)。タスク完了でカテゴリのパラメーターが上がる
+  params: { int: 0, fit: 0, life: 0, sense: 0, grit: 0 },
   streak: { current: 0, best: 0, lastAllDoneDate: null },
   tasks: [],
   memories: [],
@@ -102,6 +104,7 @@ function loadState() {
       state.streak = Object.assign({}, DEFAULT_STATE.streak, parsed.streak);
       state.stats = Object.assign({}, DEFAULT_STATE.stats, parsed.stats);
       state.ff = Object.assign({}, DEFAULT_STATE.ff, parsed.ff);
+      state.params = Object.assign({}, DEFAULT_STATE.params, parsed.params);
       if (!Array.isArray(state.ff.rewardedIds)) state.ff.rewardedIds = [];
       if (!Array.isArray(state.tasks)) state.tasks = [];
       if (!Array.isArray(state.memories)) state.memories = [];
@@ -181,6 +184,30 @@ function ffRewardFor(task) {
   return { coins: eco.coins[diff] || 20, affection: eco.affection[diff] || 4 };
 }
 
+/** タスクのパラメーターカテゴリ (手動設定 > キーワード自動分類) */
+function taskParamCategory(task) {
+  if (task.category && state.params.hasOwnProperty(task.category)) return task.category;
+  if (typeof GameData !== 'undefined' && GameData.classifyTask) {
+    return GameData.classifyTask(ffTaskTitle(task));
+  }
+  return 'grit';
+}
+
+/** 緊急度に応じたパラメーター上昇量 */
+function paramGainFor(task) {
+  const gains = (typeof GameData !== 'undefined' && GameData.PARAM_GAIN) || { must: 3, want: 2, nice: 1 };
+  return gains[task.urgency] || 2;
+}
+
+/** トースト用のパラメーター上昇表示 (例: '📚+3 💪+2') */
+function paramGainLabel(paramGains) {
+  if (typeof GameData === 'undefined') return '';
+  return GameData.PARAMS
+    .filter(p => paramGains[p.id])
+    .map(p => `${p.icon}+${paramGains[p.id]}`)
+    .join(' ');
+}
+
 /** 完了されたタスクを検知して、まとめて報酬を出す (FFX の保存毎に呼ばれる) */
 let _knownTaskIds = null; // 新規追加検知用 (メモリのみ)
 
@@ -207,11 +234,17 @@ function ffCheckExternalCompletions() {
   if (newly.length > 0) {
     let coins = 0;
     let aff = 0;
+    const paramGains = {}; // paramId → 上昇量
     newly.forEach(t => {
       const r = ffRewardFor(t);
       coins += r.coins;
       aff += r.affection;
       state.ff.rewardedIds.push(t.id);
+      // パラメーター上昇 (カテゴリ未設定はタイトルから自動分類)
+      const cat = taskParamCategory(t);
+      const gain = paramGainFor(t);
+      state.params[cat] = (state.params[cat] || 0) + gain;
+      paramGains[cat] = (paramGains[cat] || 0) + gain;
     });
     const prevAff = state.affection;
     state.coins += coins;
@@ -220,12 +253,19 @@ function ffCheckExternalCompletions() {
     state.stats.totalCompleted += newly.length;
     checkLevelUp(prevAff);
 
+    // セリフ: 1件完了なら 40% でパラメーター褒め、それ以外は task_complete
     const last = newly[newly.length - 1];
-    const speech = getSpeech('task_complete', { task: ffTaskTitle(last) });
+    const lastCat = taskParamCategory(last);
+    let speech;
+    if (newly.length === 1 && Math.random() < 0.4 && typeof Dialogue !== 'undefined' && Dialogue.praise) {
+      speech = Dialogue.praise(lastCat, state);
+    } else {
+      speech = getSpeech('task_complete', { task: ffTaskTitle(last) });
+    }
     _lastBubbleText = speech;
     showBubble(speech);
     renderChara('home-chara', 'joy');
-    showToast(`⚡FocusFlow ${newly.length}件完了 🪙+${coins} ✨+${aff}`);
+    showToast(`🪙+${coins} ✨+${aff} ${paramGainLabel(paramGains)}`);
 
     if (isEverythingDoneToday()) handleAllDone(getEconomy());
   }
@@ -536,10 +576,14 @@ function renderDateSpots() {
   const currentLv = (typeof GameData !== 'undefined') ? GameData.levelFor(state.affection).lv : 1;
 
   container.innerHTML = spots.map(spot => {
-    const locked   = currentLv < spot.minLevel;
-    const noCoins  = state.coins < spot.price;
-    const disabled = locked || noCoins;
-    const lockMsg  = locked ? `Lv${spot.minLevel} で解放` : noCoins ? 'コイン不足' : '';
+    const lvLocked   = currentLv < spot.minLevel;
+    const statLocked = !spotStatOk(spot);
+    const locked     = lvLocked || statLocked;
+    const noCoins    = state.coins < spot.price;
+    const disabled   = locked || noCoins;
+    const lockMsg = lvLocked ? `Lv${spot.minLevel} で解放`
+      : statLocked ? `${statReqLabel(spot)}で解放`
+      : noCoins ? 'コイン不足' : '';
 
     return `<div class="spot-card${locked ? ' locked' : ''}">
       <div class="spot-icon">${esc(spot.icon)}</div>
@@ -565,11 +609,25 @@ function renderDateSpots() {
 // ─── デート VN ────────────────────────────────────────────────
 let vnState = null; // { spot, beatIndex }
 
+/** デートスポットのステータス条件 (例: 感性3以上) を満たしているか */
+function spotStatOk(spot) {
+  if (!spot.statReq) return true;
+  return (state.params[spot.statReq.param] || 0) >= spot.statReq.value;
+}
+
+/** 'カテゴリ名+必要値' のラベル (例: '🎨感性3') */
+function statReqLabel(spot) {
+  if (!spot.statReq || typeof GameData === 'undefined') return '';
+  const p = GameData.PARAMS.find(p => p.id === spot.statReq.param);
+  return p ? `${p.icon}${p.name}${spot.statReq.value}` : '';
+}
+
 function startDate(spotId) {
   if (typeof GameData === 'undefined') return;
   const spot = GameData.DATE_SPOTS.find(s => s.id === spotId);
   if (!spot) return;
   if (state.coins < spot.price) return;
+  if (GameData.levelFor(state.affection).lv < spot.minLevel || !spotStatOk(spot)) return;
 
   state.coins -= spot.price;
   saveState();
@@ -658,8 +716,64 @@ function endDate() {
 }
 
 // ─── きろく ──────────────────────────────────────────────────
+/** きろく: パラメーターのレーダーチャート (SVG 五角形) と一覧 */
+function renderParamChart() {
+  const radarEl = document.getElementById('param-radar');
+  const listEl  = document.getElementById('param-list');
+  if (!radarEl || typeof GameData === 'undefined') return;
+
+  const params = GameData.PARAMS;
+  const vals = params.map(p => state.params[p.id] || 0);
+  // 軸の最大値: 10 刻みで切り上げ (最低 10)
+  const maxV = Math.max(10, Math.ceil(Math.max.apply(null, vals) / 10) * 10);
+
+  const cx = 110, cy = 95, R = 64;
+  const point = (i, ratio) => {
+    const ang = -Math.PI / 2 + (i * 2 * Math.PI / params.length);
+    return [cx + R * ratio * Math.cos(ang), cy + R * ratio * Math.sin(ang)];
+  };
+  const ringPoly = ratio =>
+    params.map((_, i) => point(i, ratio).map(v => v.toFixed(1)).join(',')).join(' ');
+
+  // 目盛り 3 リング + 軸線
+  let svg = '';
+  [1, 2 / 3, 1 / 3].forEach(r => {
+    svg += `<polygon points="${ringPoly(r)}" fill="none" stroke="var(--border-mid)" stroke-width="1"/>`;
+  });
+  params.forEach((_, i) => {
+    const [x, y] = point(i, 1);
+    svg += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--border-mid)" stroke-width="1"/>`;
+  });
+
+  // 値ポリゴン
+  const valPoly = params.map((p, i) =>
+    point(i, (state.params[p.id] || 0) / maxV).map(v => v.toFixed(1)).join(',')
+  ).join(' ');
+  svg += `<polygon points="${valPoly}" fill="rgba(232,113,141,0.35)" stroke="var(--pink-dark)" stroke-width="2" stroke-linejoin="round"/>`;
+
+  // 軸ラベル (アイコン+値)
+  params.forEach((p, i) => {
+    const [x, y] = point(i, 1.27);
+    svg += `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-size="13">${p.icon}${state.params[p.id] || 0}</text>`;
+  });
+
+  radarEl.innerHTML = `<svg viewBox="0 0 220 190" role="img" aria-label="パラメーター">${svg}</svg>`;
+
+  if (listEl) {
+    listEl.innerHTML = params.map(p => {
+      const v = state.params[p.id] || 0;
+      return `<div class="param-row">
+        <span class="param-name">${p.icon} ${esc(p.name)}</span>
+        <div class="param-bar-bg"><div class="param-bar-fill" style="width:${Math.min(100, v / maxV * 100)}%"></div></div>
+        <span class="param-val">${v}</span>
+      </div>`;
+    }).join('');
+  }
+}
+
 function renderRecords() {
   if (typeof GameData === 'undefined') return;
+  renderParamChart();
   const lv = GameData.levelFor(state.affection);
   const levels = GameData.LEVELS;
   const lvIdx  = levels.findIndex(l => l.lv === lv.lv);

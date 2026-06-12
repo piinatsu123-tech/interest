@@ -35,6 +35,44 @@
     streakBonusCap: 50
   };
 
+  /* ── 自分のパラメーター (ときメモ式の自分磨き) ──
+     タスクにカテゴリを付けて完了するとそのパラメーターが上がる。 */
+  var PARAMS = [
+    { id: 'int',   name: '知性',   icon: '📚' },
+    { id: 'fit',   name: '体力',   icon: '💪' },
+    { id: 'life',  name: '生活力', icon: '🏠' },
+    { id: 'sense', name: '感性',   icon: '🎨' },
+    { id: 'grit',  name: '根性',   icon: '🔥' }
+  ];
+
+  // 緊急度 → 上昇量
+  var PARAM_GAIN = { must: 3, want: 2, nice: 1 };
+
+  /* カテゴリ未設定タスクのキーワード自動分類 (LINE 取り込み等)。
+     最初にマッチしたカテゴリを採用。どれにも当たらなければ 'grit'。 */
+  var PARAM_KEYWORDS = {
+    int:   ['勉強', '読書', '本を読', '学習', '資格', '英語', '単語', '課題', 'レポート',
+            '宿題', '講義', '授業', '調べ', '仕事', '資料', '企画', 'メール', '書類'],
+    fit:   ['筋トレ', '運動', 'ランニング', 'ラン', 'ジョギング', 'ジム', '散歩',
+            'ウォーキング', 'ヨガ', 'ストレッチ', 'スポーツ', '走る', '泳'],
+    life:  ['掃除', 'そうじ', '洗濯', '料理', '自炊', '買い物', '買い出し', '片付け',
+            '片づけ', '皿', 'ゴミ', '銀行', '手続き', '予約', '病院', '美容院', '振込'],
+    sense: ['絵', 'イラスト', '音楽', 'ピアノ', 'ギター', 'デザイン', '写真', '映画',
+            '創作', '日記', 'ブログ', '手芸', '編み物', '工作', '楽器']
+  };
+
+  function classifyTask(title) {
+    var t = String(title || '');
+    var ids = ['int', 'fit', 'life', 'sense'];
+    for (var i = 0; i < ids.length; i++) {
+      var kws = PARAM_KEYWORDS[ids[i]];
+      for (var k = 0; k < kws.length; k++) {
+        if (t.indexOf(kws[k]) !== -1) { return ids[i]; }
+      }
+    }
+    return 'grit';
+  }
+
   /* プレゼント 10 種。価格帯 30〜500、affection は価格の約 1/10。
      reactions は各性格 2 本以上。{user}={me} 等のプレースホルダ利用可。 */
   var GIFTS = [
@@ -323,7 +361,7 @@
       ]
     },
     {
-      id: 'movie', name: '映画館', icon: '🎬', price: 250, minLevel: 2, bgClass: 'vn-cinema', affection: 35,
+      id: 'movie', name: '映画館', icon: '🎬', price: 250, minLevel: 2, statReq: { param: 'sense', value: 3 }, bgClass: 'vn-cinema', affection: 35,
       script: [
         { speaker: 'narration', lines: 'チケットを手に、暗い館内へ。隣り合った席に腰を下ろす。' },
         { speaker: 'char', lines: {
@@ -352,7 +390,7 @@
       ]
     },
     {
-      id: 'aquarium', name: '水族館', icon: '🐠', price: 400, minLevel: 3, bgClass: 'vn-aquarium', affection: 50,
+      id: 'aquarium', name: '水族館', icon: '🐠', price: 400, minLevel: 3, statReq: { param: 'int', value: 6 }, bgClass: 'vn-aquarium', affection: 50,
       script: [
         { speaker: 'narration', lines: '青い光が揺れる館内。魚たちが二人の影をすり抜けていく。' },
         { speaker: 'char', lines: {
@@ -388,7 +426,7 @@
       ]
     },
     {
-      id: 'amusement', name: '遊園地', icon: '🎡', price: 600, minLevel: 4, bgClass: 'vn-amusement', affection: 65,
+      id: 'amusement', name: '遊園地', icon: '🎡', price: 600, minLevel: 4, statReq: { param: 'fit', value: 10 }, bgClass: 'vn-amusement', affection: 65,
       script: [
         { speaker: 'narration', lines: 'ゲートをくぐると、歓声と音楽が二人を包み込んだ。' },
         { speaker: 'char', lines: {
@@ -424,7 +462,7 @@
       ]
     },
     {
-      id: 'onsen', name: '温泉旅行', icon: '♨️', price: 1000, minLevel: 5, bgClass: 'vn-onsen', affection: 80,
+      id: 'onsen', name: '温泉旅行', icon: '♨️', price: 1000, minLevel: 5, statReq: { param: 'life', value: 15 }, bgClass: 'vn-onsen', affection: 80,
       script: [
         { speaker: 'narration', lines: 'のどかな温泉街。湯けむりの向こうに、泊まる宿が見えてきた。' },
         { speaker: 'char', lines: {
@@ -460,6 +498,10 @@
     levelFor: levelFor,
     tierFor: tierFor,
     ECONOMY: ECONOMY,
+    PARAMS: PARAMS,
+    PARAM_GAIN: PARAM_GAIN,
+    PARAM_KEYWORDS: PARAM_KEYWORDS,
+    classifyTask: classifyTask,
     GIFTS: GIFTS,
     DATE_SPOTS: DATE_SPOTS
   };

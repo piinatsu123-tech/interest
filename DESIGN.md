@@ -44,6 +44,7 @@
   },
   affection: 0,                              // 親密度(累積、減らない)
   coins: 0,
+  params: { int, fit, life, sense, grit },   // 自分のパラメーター(ときメモ式)
   streak: { current: 0, best: 0, lastAllDoneDate: null },  // 'YYYY-MM-DD'
   tasks: [],                                 // 旧形式 (移行後は常に空。タスクは ff-tasks へ)
   ff: { enabled, initialized, migrated, rewardedIds: [] },  // FocusFlow 統合の管理
@@ -186,6 +187,24 @@ SPA。`<section>` 切り替え方式。ナビは下部タブバー。
   `handleAllDone` は同日 2 回目以降は何もしない
 - **ホーム**: クイックリストに未完了タスク(非 scheduled)を緊急度バッジ付きで表示。
   チェックは `FFX.toggleDone()` 経由
+
+## 自分のパラメーター(ときメモ式)
+
+タスク完了で「自分」のパラメーターが上がる成長システム。コイン・親密度と併存する第三の軸。
+
+- **5 種**: 知性📚 / 体力💪 / 生活力🏠 / 感性🎨 / 根性🔥(`GameData.PARAMS`)
+- **上昇量**: 緊急度依存 `PARAM_GAIN = { must: 3, want: 2, nice: 1 }`
+- **カテゴリ決定**: タスク編集画面のカテゴリチップ(手動)>
+  `GameData.classifyTask(title)` のキーワード自動分類(LINE 取り込み等)> フォールバック根性。
+  ff-task に `category` フィールドとして保存
+- **褒めセリフ**: `Dialogue.praise(paramId, state)`。
+  `PARAM_PRAISE[personality][paramId]`(5×5×2 本)。単独完了の 40% で task_complete の代わりに使う
+- **見える化**: きろくに SVG レーダーチャート(5 角形・3 リング目盛・軸は 10 刻み自動スケール)
+  +バー付き一覧
+- **デート解放条件**: `DATE_SPOTS[].statReq = { param, value }` をレベル条件と併用。
+  映画館=感性3、水族館=知性6、遊園地=体力10、温泉旅行=生活力15。
+  ロック表示は「🎨感性3で解放」、`startDate` でも再ガード
+- **トースト**: 報酬表示にパラメーター上昇を併記(例 `🪙+40 ✨+8 💪+3`)
 
 ## ビジュアルトーン
 

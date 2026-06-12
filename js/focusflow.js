@@ -772,8 +772,29 @@ function openEditScreen(id) {
   document.getElementById('editTaskTitle').value = t.title || '';
   document.getElementById('editDueDate').value = t.dueDate || '';
   document.getElementById('editScheduledDate').value = t.scheduledDate || '';
+  editCategory = t.category || null;
+  renderCategoryChips();
   renderEditSteps(t.steps || []);
   document.getElementById('ffx-screen-edit').classList.add('visible');
+}
+
+// ─── カテゴリ (パラメーター) 選択 ─────────────────────────────────
+let editCategory = null;
+
+function renderCategoryChips() {
+  const row = document.getElementById('editCategoryRow');
+  if (!row) return;
+  const params = (window.GameData && GameData.PARAMS) || [];
+  const items = [{ id: null, name: '自動', icon: '✨' }].concat(params);
+  row.innerHTML = items.map(p =>
+    `<button class="ffx-cat-chip${(editCategory || null) === p.id ? ' active' : ''}" data-cat="${p.id || ''}">${p.icon} ${p.name}</button>`
+  ).join('');
+  row.querySelectorAll('.ffx-cat-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      editCategory = btn.dataset.cat || null;
+      renderCategoryChips();
+    });
+  });
 }
 
 function closeEditScreen() {
@@ -938,6 +959,7 @@ function saveEdit() {
   if (newTitle) t.title = newTitle;
   const newDue = document.getElementById('editDueDate').value;
   if (newDue) t.dueDate = newDue; else delete t.dueDate;
+  if (editCategory) t.category = editCategory; else delete t.category;
   const newScheduled = document.getElementById('editScheduledDate').value;
   if (newScheduled) {
     t.scheduledDate = newScheduled;

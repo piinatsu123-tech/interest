@@ -2110,3 +2110,80 @@ input[type="color"] {
   transition: all .15s;
 }
 .ffx-add-btn:active { background: var(--border); }
+
+/* =========================================================
+   自分のパラメーター (ときメモ式)
+   ========================================================= */
+/* タスク編集画面のカテゴリチップ */
+.ffx-cat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ffx-cat-chip {
+  border: 1.5px solid var(--border-strong);
+  background: var(--card);
+  font-family: 'Noto Sans JP', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text2);
+  padding: 7px 12px;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.ffx-cat-chip.active {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg);
+}
+
+/* きろく: レーダーチャートと一覧 */
+.params-card { text-align: center; }
+.param-radar svg {
+  width: 100%;
+  max-width: 250px;
+  height: auto;
+  margin: 4px auto 0;
+  display: block;
+}
+.param-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  text-align: left;
+}
+.param-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.param-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-soft);
+  width: 76px;
+  flex-shrink: 0;
+}
+.param-bar-bg {
+  flex: 1;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.param-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--pink), var(--pink-dark));
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+.param-val {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--pink-dark);
+  width: 28px;
+  text-align: right;
+  flex-shrink: 0;
+}

@@ -247,6 +247,11 @@
           </div>
         </div>
       </div>
+      <div class="record-card params-card">
+        <div class="record-label">じぶんのパラメーター</div>
+        <div id="param-radar" class="param-radar"></div>
+        <div id="param-list" class="param-list"></div>
+      </div>
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-num" id="rec-total-tasks"></div>
@@ -530,6 +535,10 @@
     <div class="edit-section" style="margin-top:16px;">
       <div class="edit-section-label">実行日（後日実行予定の場合）</div>
       <input class="edit-due-input" id="editScheduledDate" type="date">
+    </div>
+    <div class="edit-section" style="margin-top:16px;">
+      <div class="edit-section-label">カテゴリ（完了で上がるパラメーター）</div>
+      <div class="ffx-cat-row" id="editCategoryRow"></div>
     </div>
     <div class="edit-section" style="margin-top:20px;">
       <div class="edit-section-label">ステップ</div>
