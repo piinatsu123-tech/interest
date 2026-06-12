@@ -334,19 +334,91 @@ const SVG_ALLOWED_ATTRS = new Set([
   'clip-path', 'font-size', 'font-weight', 'text-anchor'
 ]);
 
+/** <style> 要素と style 属性を、安全なプロパティだけ属性へインライン化する。
+    チャット生成 SVG は class や style でスタイリングされがちで、除去だけだと
+    真っ黒になるため。url()/javascript を含む値は捨てる */
+function inlineSVGStyles(root) {
+  const SAFE_PROPS = new Set(['fill', 'stroke', 'stroke-width', 'stroke-linecap',
+    'stroke-linejoin', 'opacity', 'fill-opacity', 'stroke-opacity', 'stop-color', 'stop-opacity']);
+  const safeVal = v => !/url\s*\(|javascript|expression|image/i.test(v);
+  const parseDecls = (text) => {
+    const decls = {};
+    String(text || '').split(';').forEach(d => {
+      const k = d.indexOf(':');
+      if (k === -1) return;
+      const prop = d.slice(0, k).trim().toLowerCase();
+      const val = d.slice(k + 1).trim();
+      if (SAFE_PROPS.has(prop) && safeVal(val)) decls[prop] = val;
+    });
+    return decls;
+  };
+
+  // <style> 内の .class { … } 規則を収集
+  const rules = {};
+  root.querySelectorAll('style').forEach(styleEl => {
+    const css = styleEl.textContent || '';
+    const re = /\.([\w-]+)\s*\{([^}]*)\}/g;
+    let m;
+    while ((m = re.exec(css))) {
+      rules[m[1]] = Object.assign(rules[m[1]] || {}, parseDecls(m[2]));
+    }
+  });
+
+  const applyDecls = (el, decls) => {
+    Object.keys(decls).forEach(prop => {
+      if (!el.hasAttribute(prop)) el.setAttribute(prop, decls[prop]);
+    });
+  };
+  if (Object.keys(rules).length) {
+    root.querySelectorAll('[class]').forEach(el => {
+      String(el.getAttribute('class') || '').split(/\s+/).forEach(cls => {
+        if (rules[cls]) applyDecls(el, rules[cls]);
+      });
+    });
+  }
+  // style="fill:…" のインライン化
+  [root, ...root.querySelectorAll('[style]')].forEach(el => {
+    const st = el.getAttribute && el.getAttribute('style');
+    if (st) applyDecls(el, parseDecls(st));
+  });
+}
+
 /** SVG 文字列を許可リストでサニタイズ。安全な SVG 文字列か null を返す */
 function sanitizeSVG(text) {
   const src = String(text || '').trim();
   if (!src || src.length > 100000) return null;
-  let doc;
+
+  // XML として読む → 壊れていたら HTML パーサーで <svg> を拾う (チャット出力に寛容に)
+  let root = null;
   try {
-    doc = new DOMParser().parseFromString(src, 'image/svg+xml');
-  } catch (e) {
-    return null;
+    const doc = new DOMParser().parseFromString(src, 'image/svg+xml');
+    if (doc.documentElement && doc.documentElement.nodeName.toLowerCase() === 'svg'
+        && !doc.querySelector('parsererror')) {
+      root = doc.documentElement;
+    }
+  } catch (e) { /* fall through */ }
+  if (!root) {
+    try {
+      root = new DOMParser().parseFromString(src, 'text/html').querySelector('svg');
+    } catch (e) {
+      return null;
+    }
   }
-  const root = doc.documentElement;
-  if (!root || root.nodeName.toLowerCase() !== 'svg') return null;
-  if (doc.querySelector('parsererror')) return null;
+  if (!root) return null;
+
+  // class/<style>/style 属性のスタイルを安全な属性にインライン化 (除去前に)
+  try { inlineSVGStyles(root); } catch (e) { /* スタイル変換失敗は無視 */ }
+
+  // viewBox が無ければ width/height から合成 (強制 0 0 200 260 だと絵が見切れる)
+  if (!root.getAttribute('viewBox')) {
+    const w = parseFloat(root.getAttribute('width'));
+    const h = parseFloat(root.getAttribute('height'));
+    if (w > 0 && h > 0) {
+      root.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    } else {
+      root.setAttribute('viewBox', '0 0 200 260');
+    }
+  }
 
   const safeValue = (name, value) => {
     const v = String(value);
@@ -378,11 +450,66 @@ function sanitizeSVG(text) {
       root.removeAttribute(attr.name);
     }
   });
-  if (!root.getAttribute('viewBox')) root.setAttribute('viewBox', '0 0 200 260');
   root.removeAttribute('width');
   root.removeAttribute('height');
   walk(root);
-  return new XMLSerializer().serializeToString(root);
+  const out = new XMLSerializer().serializeToString(root);
+  return out.length > 200000 ? null : out;
+}
+
+// ─── 保存済みカスタム SVG の viewBox 自動修復 ──────────────────
+// 旧バージョンのサニタイザーは viewBox の無い SVG に 0 0 200 260 を強制して
+// いたため、大きな座標系で描かれた立ち絵が見切れて「表示されない」状態になる。
+// 起動時に実描画の bbox を測り、大きく外れていれば viewBox を合わせ直す。
+function repairCustomArtViewBox() {
+  const fixOne = (svgStr) => {
+    const holder = document.createElement('div');
+    holder.style.cssText = 'position:absolute;left:-9999px;top:0;width:200px;height:260px;visibility:hidden;';
+    holder.innerHTML = svgStr;
+    const svg = holder.querySelector('svg');
+    if (!svg) return null;
+    document.body.appendChild(holder);
+    let fixed = null;
+    try {
+      const bb = svg.getBBox();
+      const vb = (svg.getAttribute('viewBox') || '0 0 200 260').trim().split(/[\s,]+/).map(Number);
+      if (bb.width > 0 && bb.height > 0 && vb.length === 4) {
+        const clipped =
+          bb.x + bb.width  > vb[0] + vb[2] * 1.5 ||
+          bb.y + bb.height > vb[1] + vb[3] * 1.5 ||
+          bb.x < vb[0] - vb[2] * 0.5 ||
+          bb.y < vb[1] - vb[3] * 0.5;
+        if (clipped) {
+          const pad = Math.max(bb.width, bb.height) * 0.04;
+          svg.setAttribute('viewBox',
+            `${(bb.x - pad).toFixed(1)} ${(bb.y - pad).toFixed(1)} ${(bb.width + pad * 2).toFixed(1)} ${(bb.height + pad * 2).toFixed(1)}`);
+          fixed = new XMLSerializer().serializeToString(svg);
+        }
+      }
+    } catch (e) { /* getBBox 不可の環境では何もしない */ }
+    holder.remove();
+    return fixed;
+  };
+
+  let touched = false;
+  const repairChar = (character) => {
+    const art = character && character.customArt;
+    if (!art || !art.base) return;
+    const fixedBase = fixOne(art.base);
+    if (fixedBase) { art.base = fixedBase; touched = true; }
+    if (art.expressions) {
+      Object.keys(art.expressions).forEach(k => {
+        const f = fixOne(art.expressions[k]);
+        if (f) { art.expressions[k] = f; touched = true; }
+      });
+    }
+  };
+  repairChar(state.character);
+  (state.roster || []).forEach(e => repairChar(e.character));
+  if (touched) {
+    saveState();
+    renderChara('home-chara', getDefaultExpression());
+  }
 }
 
 // ─── キャラ立ち絵描画 ─────────────────────────────────────────
@@ -2059,6 +2186,9 @@ function init() {
     document.getElementById('screen-main').classList.remove('hidden');
 
     renderHome(wasAway);
+
+    // 見切れているカスタム立ち絵を修復 (旧サニタイザーの viewBox 強制の救済)
+    repairCustomArtViewBox();
 
     // 旧バージョンのネイティブタスクを FocusFlow システムへ一度だけ移行
     migrateNativeTasks();
