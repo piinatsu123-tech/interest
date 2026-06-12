@@ -34,6 +34,8 @@
       </div>
       <div class="wizard-import-row">
         <button class="btn-link" id="wizard-import-btn">💬 チャットで作った子をインポート</button>
+        <button class="btn-link" id="wizard-art-upload-btn">📷 画像から作る</button>
+        <button class="btn-link hidden" id="wizard-art-revert-btn">↩️ パーツ編集に戻す</button>
       </div>
 
       <div class="setup-form">
@@ -44,6 +46,10 @@
         <div class="form-row">
           <label>アクセサリー</label>
           <div id="accessory-select" class="chip-group"></div>
+        </div>
+        <div class="form-row">
+          <label>服装</label>
+          <div id="outfitStyle-select" class="chip-group"></div>
         </div>
         <div class="color-grid">
           <div class="color-item">
@@ -306,6 +312,10 @@
             <label>アクセサリー</label>
             <div id="settings-accessory-select" class="chip-group"></div>
           </div>
+          <div class="form-row">
+            <label>服装</label>
+            <div id="settings-outfit-select" class="chip-group"></div>
+          </div>
           <div class="color-grid">
             <div class="color-item">
               <label for="s2-hair">髪の色</label>
@@ -323,6 +333,10 @@
               <label for="s2-outfit">服の色</label>
               <input type="color" id="s2-outfit">
             </div>
+          </div>
+          <div class="import-btn-row" style="margin-top:12px">
+            <button class="btn-secondary" id="settings-art-upload-btn">📷 画像から作る</button>
+            <button class="btn-secondary hidden" id="settings-art-revert-btn">↩️ パーツ編集に戻す</button>
           </div>
         </div>
       </div>
@@ -451,6 +465,8 @@
   </div>
 </div>
 
+
+<input type="file" id="art-file-input" accept="image/*" class="hidden">
 
 <!-- ===================== キャラ相談プロンプト ===================== -->
 <div id="char-prompt-modal" class="modal-overlay hidden">

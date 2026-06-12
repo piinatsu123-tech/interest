@@ -65,6 +65,7 @@ const DEFAULT_STATE = {
       eyeColor: '#4a6fa5',
       skinTone: '#ffe3cf',
       outfitColor: '#e8718d',
+      outfitStyle: 'dress',
       accessory: 'none'
     }
   },
@@ -382,14 +383,21 @@ function sanitizeSVG(text) {
 }
 
 // ─── キャラ立ち絵描画 ─────────────────────────────────────────
+/** customArt (SVG or 画像) の描画用 HTML。SVG はインポート時にサニタイズ済み、
+    dataUrl は保存時に形式検証済みなのでそのまま流し込める */
+function customArtHTML(art, expression) {
+  if (art.dataUrl) return `<img class="custom-art-img" src="${art.dataUrl}" alt="キャラクター">`;
+  const ex = expression || 'normal';
+  return (art.expressions && art.expressions[ex]) || art.base;
+}
+
 function renderChara(containerId, expression) {
   const el = document.getElementById(containerId);
   if (!el) return;
-  // フルカスタム立ち絵 (インポート時にサニタイズ済み)
+  // フルカスタム立ち絵
   const art = state && state.character && state.character.customArt;
-  if (art && art.base) {
-    const ex = expression || 'normal';
-    el.innerHTML = (art.expressions && art.expressions[ex]) || art.base;
+  if (art && (art.base || art.dataUrl)) {
+    el.innerHTML = customArtHTML(art, expression);
     return;
   }
   if (typeof CharacterArt === 'undefined') {
@@ -945,6 +953,16 @@ function initSettingsTab() {
     renderSettingsPreview();
   });
 
+  // 服装
+  buildChipGroup('settings-outfit-select', CharacterArt ? CharacterArt.OUTFIT_STYLES : [], ch.look.outfitStyle, v => {
+    state.character.look.outfitStyle = v;
+    renderSettingsPreview();
+  });
+
+  // 画像立ち絵の「パーツ編集に戻す」ボタン表示
+  const artRevert = document.getElementById('settings-art-revert-btn');
+  if (artRevert) artRevert.classList.toggle('hidden', !(ch.customArt && (ch.customArt.base || ch.customArt.dataUrl)));
+
   // 性格 (フルカスタムをインポート済みならそのカードも出す)
   buildPersonalityGrid('settings-personality-grid', ch.personality, v => {
     state.character.personality = v;
@@ -953,7 +971,8 @@ function initSettingsTab() {
 }
 
 function renderSettingsPreview() {
-  // 設定フォームの値を一時的に look に反映してプレビュー
+  // パーツを操作したときはパラメトリック表示で確認できるようにする
+  // (カスタム立ち絵を使用中でも、ここのプレビューだけはパーツ側を見せる)
   const look = Object.assign({}, state.character.look);
   const get = id => { const el = document.getElementById(id); return el ? el.value : null; };
   if (get('s2-hair'))   look.hairColor  = get('s2-hair');
@@ -966,6 +985,72 @@ function renderSettingsPreview() {
   if (typeof CharacterArt !== 'undefined') {
     el.innerHTML = CharacterArt.render(look, 'smile');
   }
+}
+
+// ─── 画像から立ち絵を作る ───────────────────────────────────────
+let artUploadContext = 'settings'; // 'settings' | 'setup'
+
+/** 画像ファイル → リサイズ済み dataURL (PNG、重ければ JPEG) */
+function processArtFile(file, cb) {
+  if (!file || !/^image\//.test(file.type)) {
+    showToast('画像ファイルを選んでください');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const MAXW = 400;
+      const MAXH = 520;
+      const scale = Math.min(1, MAXW / img.width, MAXH / img.height);
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      let dataUrl = canvas.toDataURL('image/png');
+      if (dataUrl.length > 600000) dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      if (dataUrl.length > 900000 || !/^data:image\/(png|jpeg);base64,[A-Za-z0-9+\/=]+$/.test(dataUrl)) {
+        showToast('この画像は使えませんでした (大きすぎます)');
+        return;
+      }
+      cb(dataUrl);
+    };
+    img.onerror = () => showToast('画像を読み込めませんでした');
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleArtFileSelected(file) {
+  processArtFile(file, dataUrl => {
+    if (artUploadContext === 'setup') {
+      wizardCustom = Object.assign({}, wizardCustom, { customArt: { dataUrl } });
+      renderWizardPreview();
+    } else {
+      state.character.customArt = { dataUrl };
+      saveState();
+      renderChara('home-chara', 'smile');
+      initSettingsTab();
+      showBubble('イメチェン、どうかな?');
+    }
+    showToast('📷 立ち絵を設定しました');
+  });
+}
+
+/** カスタム立ち絵をやめてパーツ編集に戻す */
+function revertCustomArt(context) {
+  if (context === 'setup') {
+    if (wizardCustom) wizardCustom.customArt = null;
+    renderWizardPreview();
+  } else {
+    state.character.customArt = null;
+    saveState();
+    renderChara('home-chara', 'smile');
+    initSettingsTab();
+  }
+  showToast('↩️ パーツ編集に戻しました');
 }
 
 function saveSettings() {
@@ -1017,6 +1102,12 @@ function buildWizardControls() {
     renderWizardPreview();
   });
 
+  // 服装チップ
+  buildChipGroup('outfitStyle-select', CharacterArt ? CharacterArt.OUTFIT_STYLES : [], wizardLook.outfitStyle, v => {
+    wizardLook.outfitStyle = v;
+    renderWizardPreview();
+  });
+
   // カラーピッカー (再実行されるため oninput 代入で多重登録を避ける)
   const colorIds = [
     ['c-hair',   'hairColor'],
@@ -1045,6 +1136,13 @@ function buildWizardControls() {
 function renderWizardPreview() {
   const el = document.getElementById('setup-chara-preview');
   if (!el) return;
+  const art = wizardCustom && wizardCustom.customArt;
+  const revertBtn = document.getElementById('wizard-art-revert-btn');
+  if (revertBtn) revertBtn.classList.toggle('hidden', !art);
+  if (art && (art.base || art.dataUrl)) {
+    el.innerHTML = customArtHTML(art, 'smile');
+    return;
+  }
   if (typeof CharacterArt !== 'undefined') {
     el.innerHTML = CharacterArt.render(wizardLook, 'smile');
   } else {
@@ -1184,6 +1282,8 @@ function buildCharPrompt() {
     .map(h => `${h.id}(${h.name})`).join(' / ');
   const accs = (typeof CharacterArt !== 'undefined' ? CharacterArt.ACCESSORIES : [])
     .map(a => `${a.id}(${a.name})`).join(' / ');
+  const outfits = (typeof CharacterArt !== 'undefined' ? CharacterArt.OUTFIT_STYLES : [])
+    .map(o => `${o.id}(${o.name})`).join(' / ');
   const pers = Object.keys(PERSONALITY_NAMES)
     .map(p => `${p}(${PERSONALITY_NAMES[p]}: ${PERSONALITY_DESCS[p]})`).join('\n  - ');
   const exprs = (typeof CharacterArt !== 'undefined' ? CharacterArt.EXPRESSIONS : []).join(' / ');
@@ -1198,7 +1298,7 @@ function buildCharPrompt() {
   "firstPerson": "一人称(8文字以内)",
   "callName": "キャラがわたしを呼ぶ名前(12文字以内)",
   "suffix": "語尾(例「にゃ」4文字以内。不要なら空)",
-  "look": { "hairStyle": "long", "hairColor": "#6b4f3a", "eyeColor": "#4a6fa5", "skinTone": "#ffe3cf", "outfitColor": "#e8718d", "accessory": "none" }
+  "look": { "hairStyle": "long", "hairColor": "#6b4f3a", "eyeColor": "#4a6fa5", "skinTone": "#ffe3cf", "outfitColor": "#e8718d", "outfitStyle": "dress", "accessory": "none" }
 }
 
 == 性格 ==
@@ -1229,6 +1329,7 @@ dialogue の場面一覧:
 かんたんに済ませるなら look でパーツを選びます:
 - hairStyle: ${hairs}
 - accessory: ${accs}
+- outfitStyle: ${outfits}
 - 色は #rrggbb 形式
 
 **フルカスタム立ち絵** にする場合は look の代わりに(または look も残したまま)次を入れてください:
@@ -1362,10 +1463,13 @@ function validateCharacterImport(obj) {
   const defLook = DEFAULT_STATE.character.look;
   const hairIds = (typeof CharacterArt !== 'undefined' ? CharacterArt.HAIR_STYLES : []).map(h => h.id);
   const accIds  = (typeof CharacterArt !== 'undefined' ? CharacterArt.ACCESSORIES : []).map(a => a.id);
+  const outfitIds = (typeof CharacterArt !== 'undefined' ? CharacterArt.OUTFIT_STYLES : []).map(o => o.id);
   const hairStyle = hairIds.includes(look.hairStyle) ? look.hairStyle : null;
   if (look.hairStyle && !hairStyle) errors.push(`hairStyle は ${hairIds.join(' / ')} のどれかにしてください`);
   const accessory = accIds.includes(look.accessory) ? look.accessory : (look.accessory ? null : 'none');
   if (look.accessory && accessory === null) errors.push(`accessory は ${accIds.join(' / ')} のどれかにしてください`);
+  const outfitStyle = outfitIds.includes(look.outfitStyle) ? look.outfitStyle : (look.outfitStyle ? null : 'dress');
+  if (look.outfitStyle && outfitStyle === null) errors.push(`outfitStyle は ${outfitIds.join(' / ')} のどれかにしてください`);
 
   // 色は #hex のみ受け付ける (SVG に埋め込むため厳格に)
   const hexRe = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -1398,6 +1502,7 @@ function validateCharacterImport(obj) {
       look: {
         hairStyle: hairStyle || defLook.hairStyle,
         hairColor, eyeColor, skinTone, outfitColor,
+        outfitStyle: outfitStyle || 'dress',
         accessory: accessory || 'none'
       }
     }
@@ -1646,6 +1751,23 @@ function bindEvents() {
   bind('char-import-apply', applyCharImport);
   const importText = document.getElementById('char-import-text');
   if (importText) importText.addEventListener('input', refreshCharImportPreview);
+
+  // 画像アップロード (せってい/ウィザード共用のファイル入力)
+  const artInput = document.getElementById('art-file-input');
+  const openArtPicker = (context) => {
+    artUploadContext = context;
+    if (artInput) {
+      artInput.value = '';
+      artInput.click();
+    }
+  };
+  if (artInput) artInput.addEventListener('change', () => {
+    if (artInput.files && artInput.files[0]) handleArtFileSelected(artInput.files[0]);
+  });
+  bind('settings-art-upload-btn', () => openArtPicker('settings'));
+  bind('wizard-art-upload-btn',   () => openArtPicker('setup'));
+  bind('settings-art-revert-btn', () => revertCustomArt('settings'));
+  bind('wizard-art-revert-btn',   () => revertCustomArt('setup'));
   // モーダル外クリックで閉じる
   ['char-prompt-modal', 'char-import-modal'].forEach(id => {
     const overlay = document.getElementById(id);

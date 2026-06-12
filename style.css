@@ -2258,3 +2258,12 @@ input[type="color"] {
   color: var(--text-soft);
   line-height: 1.6;
 }
+
+/* カスタム立ち絵 (アップロード画像) */
+.custom-art-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.wizard-import-row .btn-link { margin: 0 6px; }
