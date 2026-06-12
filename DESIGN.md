@@ -188,9 +188,38 @@ SPA。`<section>` 切り替え方式。ナビは下部タブバー。
 - **ホーム**: クイックリストに未完了タスク(非 scheduled)を緊急度バッジ付きで表示。
   チェックは `FFX.toggleDone()` 経由
 
-## キャラクターインポート(チャット相談)
+## キャラクターインポート(チャット相談・フルカスタム対応)
 
 AI チャットで相談して作ったキャラクターを JSON で取り込める。
+プリセット(5 性格×パーツ組合せ)だけでなく、**性格=セリフ集ごと自作**・
+**見た目=SVG 絵ごと自作**のフルカスタムに対応。
+
+### フルカスタム性格
+
+- JSON: `personality: "custom"` + `personalityLabel`(表示名)+
+  `basePersonality`(プリセットのどれか)+ `dialogue`(セリフ集)
+- `dialogue[situation]` は文字列配列(全 tier 共通)or `{low,mid,high}`。
+  12 場面+`gift_reaction`({gift} 可)+`praise.{int,fit,life,sense,grit}`
+- 書いた場面だけカスタムが使われ、無い場面とデート VN は basePersonality に
+  フォールバック(`Dialogue.resolvePersonality`)
+- プリセット personality + dialogue 同時指定は「プリセット改」として custom 扱い
+- 検証: 1 行 200 文字・1 プール 10 本まで。表示は textContent 経由で XSS 安全
+- せってい/ウィザードの性格グリッドに「💎 (ラベル)」カードが追加され、
+  プリセットとカスタムを行き来できる(カスタムデータは保持)
+
+### フルカスタム立ち絵 (SVG)
+
+- JSON: `svg`(viewBox 0 0 200 260)+任意の `svgExpressions`(表情差分。
+  無い表情は base を使う)
+- **サニタイズ必須**: `sanitizeSVG()` が許可リスト方式で要素
+  (path/circle/rect/polygon/g/defs/gradient 等)と属性のみ通す。
+  script・image・foreignObject・on* 属性・外部 URL・`url()`(内部 `#id` 参照以外)は
+  除去。100KB 上限。サニタイズ済み文字列を `state.character.customArt` に保存し、
+  描画時はそのまま innerHTML(再検証不要)
+- `renderChara()` が customArt を優先描画(ホーム/VN/レベルアップ/せってい共通)。
+  パラメトリック look はフォールバックとして保持
+
+### 共通
 
 - **相談用プロンプト**: せっていの「📋 相談用プロンプト」でコピー。スキーマと選択肢
   (性格 5 種・髪型・アクセ・色形式・文字数制限)は `CharacterArt`/`PERSONALITY_NAMES`

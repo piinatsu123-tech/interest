@@ -314,15 +314,97 @@ function getSpeech(situation, extra) {
   return Dialogue.get(situation, state, extra || {});
 }
 
+// ─── SVG サニタイザー (フルカスタム立ち絵用) ─────────────────────
+// インポートされた SVG から危険な要素・属性を除去する。許可リスト方式。
+const SVG_ALLOWED_TAGS = new Set([
+  'svg', 'g', 'path', 'circle', 'ellipse', 'rect', 'line', 'polyline', 'polygon',
+  'defs', 'lineargradient', 'radialgradient', 'stop', 'clippath', 'title', 'desc',
+  'text', 'tspan'
+]);
+const SVG_ALLOWED_ATTRS = new Set([
+  'viewbox', 'xmlns', 'id', 'd', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy',
+  'r', 'rx', 'ry', 'width', 'height', 'points', 'offset', 'transform',
+  'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin',
+  'stroke-dasharray', 'opacity', 'fill-opacity', 'stroke-opacity', 'fill-rule',
+  'stop-color', 'stop-opacity', 'gradientunits', 'gradienttransform',
+  'clip-path', 'font-size', 'font-weight', 'text-anchor'
+]);
+
+/** SVG 文字列を許可リストでサニタイズ。安全な SVG 文字列か null を返す */
+function sanitizeSVG(text) {
+  const src = String(text || '').trim();
+  if (!src || src.length > 100000) return null;
+  let doc;
+  try {
+    doc = new DOMParser().parseFromString(src, 'image/svg+xml');
+  } catch (e) {
+    return null;
+  }
+  const root = doc.documentElement;
+  if (!root || root.nodeName.toLowerCase() !== 'svg') return null;
+  if (doc.querySelector('parsererror')) return null;
+
+  const safeValue = (name, value) => {
+    const v = String(value);
+    if (/javascript:|data:|http/i.test(v)) return false;
+    // url(...) は内部グラデーション/クリップ参照のみ許可
+    if (/url\s*\(/i.test(v) && !/^url\(#[\w-]+\)$/.test(v.trim())) return false;
+    return true;
+  };
+
+  const walk = (el) => {
+    [...el.children].forEach(child => {
+      if (!SVG_ALLOWED_TAGS.has(child.nodeName.toLowerCase())) {
+        child.remove();
+        return;
+      }
+      [...child.attributes].forEach(attr => {
+        const n = attr.name.toLowerCase();
+        if (!SVG_ALLOWED_ATTRS.has(n) || !safeValue(n, attr.value)) {
+          child.removeAttribute(attr.name);
+        }
+      });
+      walk(child);
+    });
+  };
+  // ルート属性
+  [...root.attributes].forEach(attr => {
+    const n = attr.name.toLowerCase();
+    if (!SVG_ALLOWED_ATTRS.has(n) || !safeValue(n, attr.value)) {
+      root.removeAttribute(attr.name);
+    }
+  });
+  if (!root.getAttribute('viewBox')) root.setAttribute('viewBox', '0 0 200 260');
+  root.removeAttribute('width');
+  root.removeAttribute('height');
+  walk(root);
+  return new XMLSerializer().serializeToString(root);
+}
+
 // ─── キャラ立ち絵描画 ─────────────────────────────────────────
 function renderChara(containerId, expression) {
   const el = document.getElementById(containerId);
   if (!el) return;
+  // フルカスタム立ち絵 (インポート時にサニタイズ済み)
+  const art = state && state.character && state.character.customArt;
+  if (art && art.base) {
+    const ex = expression || 'normal';
+    el.innerHTML = (art.expressions && art.expressions[ex]) || art.base;
+    return;
+  }
   if (typeof CharacterArt === 'undefined') {
     el.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:40px">🧑</div>';
     return;
   }
   el.innerHTML = CharacterArt.render(state.character.look, expression || 'normal');
+}
+
+/** プリセットセリフ用の性格 (カスタム時はベース性格に解決) */
+function effectivePersonality() {
+  if (typeof Dialogue !== 'undefined' && Dialogue.resolvePersonality) {
+    return Dialogue.resolvePersonality(state);
+  }
+  return PERSONALITY_NAMES[state.character.personality] ? state.character.personality : 'tsundere';
 }
 
 // ─── 吹き出し表示 ──────────────────────────────────────────────
@@ -535,9 +617,14 @@ function buyGift(giftId) {
   checkLevelUp(prevAff);
 
   // リアクション
-  const personality = state.character.personality;
-  const reactions = (gift.reactions && gift.reactions[personality]) || ['ありがとう…'];
-  const rawText = pickRandom(reactions, null);
+  const custom = state.character.customDialogue;
+  let reactions;
+  if (state.character.personality === 'custom' && custom && Array.isArray(custom.gift_reaction) && custom.gift_reaction.length) {
+    reactions = custom.gift_reaction;
+  } else {
+    reactions = (gift.reactions && gift.reactions[effectivePersonality()]) || ['ありがとう…'];
+  }
+  let rawText = pickRandom(reactions, null).replace(/\{gift\}/g, gift.name);
   const text = (typeof Dialogue !== 'undefined') ? Dialogue.format(rawText, state) : rawText;
 
   // memories
@@ -655,7 +742,7 @@ function renderVNBeat() {
     return;
   }
   const beat = spot.script[beatIndex];
-  const personality = state.character.personality;
+  const personality = effectivePersonality();
 
   const speakerEl = document.getElementById('vn-speaker');
   const textEl    = document.getElementById('vn-text');
@@ -858,10 +945,10 @@ function initSettingsTab() {
     renderSettingsPreview();
   });
 
-  // 性格
+  // 性格 (フルカスタムをインポート済みならそのカードも出す)
   buildPersonalityGrid('settings-personality-grid', ch.personality, v => {
     state.character.personality = v;
-  });
+  }, ch.customDialogue ? (ch.customLabel || 'カスタム') : null);
 
 }
 
@@ -903,6 +990,7 @@ function saveSettings() {
 // ─── セットアップウィザード ────────────────────────────────────
 let wizardLook = {};
 let wizardPersonality = 'tsundere';
+let wizardCustom = null; // インポートされたフルカスタムデータ (セットアップ中のみ)
 let wizardStep = 1;
 
 function initWizard() {
@@ -948,10 +1036,10 @@ function buildWizardControls() {
 
   renderWizardPreview();
 
-  // Step2: 性格
+  // Step2: 性格 (インポートでフルカスタムが入っていればカードを出す)
   buildPersonalityGrid('personality-grid', wizardPersonality, v => {
     wizardPersonality = v;
-  });
+  }, wizardCustom ? (wizardCustom.customLabel || 'カスタム') : null);
 }
 
 function renderWizardPreview() {
@@ -991,6 +1079,12 @@ function finishSetup() {
   state.character.suffix      = suffix.trim();
   state.character.personality = wizardPersonality;
   state.character.look        = Object.assign({}, wizardLook);
+  if (wizardCustom) {
+    state.character.customLabel     = wizardCustom.customLabel || null;
+    state.character.basePersonality = wizardCustom.basePersonality || null;
+    state.character.customDialogue  = wizardCustom.customDialogue || null;
+    state.character.customArt       = wizardCustom.customArt || null;
+  }
   state.lastVisit             = todayStr();
 
   // FocusFlow の既存完了タスクには報酬を出さないよう先に初期化
@@ -1053,11 +1147,16 @@ const PERSONALITY_DESCS = {
   sweet:    '甘えたくていつも一緒にいたがる'
 };
 
-function buildPersonalityGrid(containerId, activeValue, onSelect) {
+function buildPersonalityGrid(containerId, activeValue, onSelect, customLabel) {
   const container = document.getElementById(containerId);
   if (!container) return;
   const personalities = ['tsundere', 'cool', 'caring', 'genki', 'sweet'];
-  container.innerHTML = personalities.map(p =>
+  const customCard = customLabel ? `<button class="personality-card${activeValue === 'custom' ? ' active' : ''}" data-value="custom">
+      <div class="personality-name">💎 ${esc(customLabel)}</div>
+      <div class="personality-desc">チャットで作ったフルカスタム性格</div>
+      <div class="personality-sample">インポート済みのセリフ集を使います</div>
+    </button>` : '';
+  container.innerHTML = customCard + personalities.map(p =>
     `<button class="personality-card${p === activeValue ? ' active' : ''}" data-value="${esc(p)}">
       <div class="personality-name">${esc(PERSONALITY_NAMES[p] || p)}</div>
       <div class="personality-desc">${esc(PERSONALITY_DESCS[p] || '')}</div>
@@ -1087,35 +1186,56 @@ function buildCharPrompt() {
     .map(a => `${a.id}(${a.name})`).join(' / ');
   const pers = Object.keys(PERSONALITY_NAMES)
     .map(p => `${p}(${PERSONALITY_NAMES[p]}: ${PERSONALITY_DESCS[p]})`).join('\n  - ');
+  const exprs = (typeof CharacterArt !== 'undefined' ? CharacterArt.EXPRESSIONS : []).join(' / ');
 
-  return `あなたはキャラクターデザイナーです。わたしのタスク管理アプリ「いっしょぐらし」に住んでくれるキャラクターを、会話で相談しながら一緒に作ってください。見た目・性格・話し方の希望を聞いて、提案してください。
+  return `あなたはキャラクターデザイナー兼シナリオライターです。わたしのタスク管理アプリ「いっしょぐらし」に住んでくれるキャラクターを、会話で相談しながら一緒に作ってください。見た目・性格・話し方の希望を聞いて、提案してください。
 
 キャラが決まったら、最後に次の形式の JSON をコードブロックで 1 つだけ出力してください。
 
 {
-  "name": "キャラの名前",
+  "name": "キャラの名前(12文字以内)",
   "personality": "tsundere",
-  "firstPerson": "わたし",
-  "callName": "キャラがわたしを呼ぶ名前",
-  "suffix": "",
-  "look": {
-    "hairStyle": "long",
-    "hairColor": "#6b4f3a",
-    "eyeColor": "#4a6fa5",
-    "skinTone": "#ffe3cf",
-    "outfitColor": "#e8718d",
-    "accessory": "none"
-  }
+  "firstPerson": "一人称(8文字以内)",
+  "callName": "キャラがわたしを呼ぶ名前(12文字以内)",
+  "suffix": "語尾(例「にゃ」4文字以内。不要なら空)",
+  "look": { "hairStyle": "long", "hairColor": "#6b4f3a", "eyeColor": "#4a6fa5", "skinTone": "#ffe3cf", "outfitColor": "#e8718d", "accessory": "none" }
 }
 
-制約:
-- personality は次のどれか:
+== 性格 ==
+かんたんに済ませるなら personality を次のプリセットから選びます:
   - ${pers}
-- look.hairStyle: ${hairs}
-- look.accessory: ${accs}
+
+**フルカスタム性格** にする場合は、personality の代わりに次を入れてください:
+- "personality": "custom"、"personalityLabel": "性格の名前(16文字以内)"
+- "basePersonality": プリセットのどれか(書いていない場面とデートシーンで使う代役)
+- "dialogue": 下の場面ごとのセリフ集。各場面は文字列の配列(2〜5本)、または親密度段階別の {"low":[…],"mid":[…],"high":[…]}(low=出会った頃/mid=仲良し/high=心を許した関係)
+
+dialogue の場面一覧:
+- greeting_morning / greeting_day / greeting_evening / greeting_night … 時間帯の挨拶
+- task_add … タスク追加時({task} でタスク名が入る)
+- task_complete … タスク完了時({task} 可)
+- all_done … その日の全タスク完了
+- idle … 立ち絵をタップしたときの雑談(多めに 5 本ほしい)
+- has_overdue … 夕方以降にタスクが残っているとき
+- comeback … 数日ぶりに会えたとき
+- levelup … 親密度が上がったとき
+- setup_first … 初対面の挨拶
+- gift_reaction … プレゼントをもらったとき({gift} でプレゼント名が入る)
+- praise … 自分磨きを褒める。{"int":[…],"fit":[…],"life":[…],"sense":[…],"grit":[…]}(知性/体力/生活力/感性/根性)
+
+セリフの中で {user} はわたしの呼び名、{me} はキャラの一人称に置き換わります。全場面を書くのが理想ですが、書いた分だけ使われます(残りは basePersonality の標準セリフ)。
+
+== 見た目 ==
+かんたんに済ませるなら look でパーツを選びます:
+- hairStyle: ${hairs}
+- accessory: ${accs}
 - 色は #rrggbb 形式
-- name と callName は 12 文字以内、firstPerson は一人称で 8 文字以内
-- suffix は語尾 (例「にゃ」) で 4 文字以内。不要なら ""`;
+
+**フルカスタム立ち絵** にする場合は look の代わりに(または look も残したまま)次を入れてください:
+- "svg": "<svg viewBox=\\"0 0 200 260\\">…</svg>" … 立ち絵の SVG。全身のデフォルメキャラ(2.5頭身くらい)、中央配置、足元が y=250 付近。path/circle/ellipse/rect/polygon と linearGradient だけで描く(script・image・外部参照は使えません)
+- "svgExpressions": { "joy": "<svg…>", "sad": "<svg…>" } … 任意の表情差分(${exprs} のうち好きなもの。無い表情は基本の svg を使う)
+
+JSON は必ず正しい構文で、1 つのコードブロックにまとめてください。`;
 }
 
 /** チャット出力の揺れを吸収して JSON を取り出す */
@@ -1131,6 +1251,57 @@ function parseCharacterJSON(text) {
   return JSON.parse(t.slice(start, end + 1));
 }
 
+const DIALOGUE_SITUATIONS = [
+  'greeting_morning', 'greeting_day', 'greeting_evening', 'greeting_night',
+  'task_add', 'task_complete', 'all_done', 'idle', 'has_overdue',
+  'comeback', 'levelup', 'setup_first'
+];
+
+/** カスタムセリフ集の検証・正規化。{ ok, dialogue } or { ok:false, error } */
+function validateCustomDialogue(raw) {
+  if (!raw || typeof raw !== 'object') return { ok: false, error: 'dialogue がありません' };
+  const cleanPool = (v) => {
+    const arr = Array.isArray(v) ? v : null;
+    if (!arr) return null;
+    const lines = arr.filter(x => typeof x === 'string' && x.trim())
+      .map(x => x.trim().slice(0, 200)).slice(0, 10);
+    return lines.length ? lines : null;
+  };
+  const cleanEntry = (v) => {
+    if (Array.isArray(v)) return cleanPool(v);
+    if (v && typeof v === 'object') {
+      const out = {};
+      ['low', 'mid', 'high'].forEach(t => {
+        const p = cleanPool(v[t]);
+        if (p) out[t] = p;
+      });
+      return Object.keys(out).length ? out : null;
+    }
+    return null;
+  };
+
+  const dialogue = {};
+  let count = 0;
+  DIALOGUE_SITUATIONS.forEach(sit => {
+    const e = cleanEntry(raw[sit]);
+    if (e) { dialogue[sit] = e; count++; }
+  });
+  const gift = cleanPool(raw.gift_reaction);
+  if (gift) dialogue.gift_reaction = gift;
+  if (raw.praise && typeof raw.praise === 'object') {
+    const praise = {};
+    ['int', 'fit', 'life', 'sense', 'grit'].forEach(pid => {
+      const p = cleanPool(raw.praise[pid]);
+      if (p) praise[pid] = p;
+    });
+    if (Object.keys(praise).length) dialogue.praise = praise;
+  }
+  if (count === 0) {
+    return { ok: false, error: 'dialogue に有効なセリフがありません (situation 名と文字列配列を確認してください)' };
+  }
+  return { ok: true, dialogue, situationCount: count };
+}
+
 /** インポート候補を検証して正規化。{ ok, character } or { ok:false, error } */
 function validateCharacterImport(obj) {
   if (!obj || typeof obj !== 'object') return { ok: false, error: 'JSON の形式が正しくありません' };
@@ -1139,9 +1310,52 @@ function validateCharacterImport(obj) {
   const name = String(obj.name || '').trim().slice(0, 12);
   if (!name) errors.push('name (キャラの名前) がありません');
 
-  const personality = String(obj.personality || '');
+  // 性格: プリセット or フルカスタム (dialogue 必須)
+  let personality = String(obj.personality || '');
+  let customLabel = null;
+  let basePersonality = null;
+  let customDialogue = null;
   if (!PERSONALITY_NAMES[personality]) {
-    errors.push(`personality は ${Object.keys(PERSONALITY_NAMES).join(' / ')} のどれかにしてください`);
+    if (obj.dialogue) {
+      // フルカスタム性格
+      customLabel = String(obj.personalityLabel || personality || 'カスタム').trim().slice(0, 16) || 'カスタム';
+      personality = 'custom';
+      basePersonality = PERSONALITY_NAMES[obj.basePersonality] ? String(obj.basePersonality) : 'cool';
+      const dres = validateCustomDialogue(obj.dialogue);
+      if (!dres.ok) errors.push(dres.error);
+      else customDialogue = dres.dialogue;
+    } else {
+      errors.push(`personality は ${Object.keys(PERSONALITY_NAMES).join(' / ')} のどれか、またはフルカスタム (dialogue 必須) にしてください`);
+    }
+  } else if (obj.dialogue) {
+    // プリセット指定+セリフ集 → カスタム扱い (プリセットをベースに)
+    const dres = validateCustomDialogue(obj.dialogue);
+    if (dres.ok) {
+      customLabel = String(obj.personalityLabel || PERSONALITY_NAMES[personality] + '改').trim().slice(0, 16);
+      basePersonality = personality;
+      personality = 'custom';
+      customDialogue = dres.dialogue;
+    }
+  }
+
+  // フルカスタム立ち絵 (SVG)
+  let customArt = null;
+  if (obj.svg) {
+    const base = sanitizeSVG(obj.svg);
+    if (!base) {
+      errors.push('svg を読み込めませんでした (許可されない要素を含むか、形式が不正です)');
+    } else {
+      customArt = { base, expressions: {} };
+      if (obj.svgExpressions && typeof obj.svgExpressions === 'object') {
+        const exIds = (typeof CharacterArt !== 'undefined') ? CharacterArt.EXPRESSIONS : [];
+        exIds.forEach(ex => {
+          if (obj.svgExpressions[ex]) {
+            const clean = sanitizeSVG(obj.svgExpressions[ex]);
+            if (clean) customArt.expressions[ex] = clean;
+          }
+        });
+      }
+    }
   }
 
   const look = obj.look || {};
@@ -1174,6 +1388,10 @@ function validateCharacterImport(obj) {
     character: {
       name,
       personality,
+      customLabel,
+      basePersonality,
+      customDialogue,
+      customArt,
       firstPerson: String(obj.firstPerson || 'わたし').trim().slice(0, 8) || 'わたし',
       callName: String(obj.callName || '').trim().slice(0, 12), // 空なら適用時に現状維持
       suffix: String(obj.suffix || '').trim().slice(0, 4),
@@ -1266,12 +1484,24 @@ function refreshCharImportPreview() {
 
   // プレビュー: 立ち絵+名前+性格+その子の声のサンプル
   const artEl = document.getElementById('char-import-preview-art');
-  if (artEl && typeof CharacterArt !== 'undefined') {
-    artEl.innerHTML = CharacterArt.render(ch.look, 'smile');
+  if (artEl) {
+    if (ch.customArt) {
+      artEl.innerHTML = ch.customArt.base; // サニタイズ済み
+    } else if (typeof CharacterArt !== 'undefined') {
+      artEl.innerHTML = CharacterArt.render(ch.look, 'smile');
+    }
   }
   document.getElementById('char-import-preview-name').textContent = ch.name;
-  const meta = [PERSONALITY_NAMES[ch.personality], `一人称「${ch.firstPerson}」`];
+  const pLabel = ch.personality === 'custom'
+    ? `💎 ${ch.customLabel}(ベース: ${PERSONALITY_NAMES[ch.basePersonality]})`
+    : PERSONALITY_NAMES[ch.personality];
+  const meta = [pLabel, `一人称「${ch.firstPerson}」`];
   if (ch.suffix) meta.push(`語尾「${ch.suffix}」`);
+  if (ch.customDialogue) {
+    const n = Object.keys(ch.customDialogue).filter(k => k !== 'praise' && k !== 'gift_reaction').length;
+    meta.push(`セリフ集 ${n} 場面`);
+  }
+  if (ch.customArt) meta.push('オリジナル立ち絵');
   document.getElementById('char-import-preview-meta').textContent = meta.join(' · ');
   const sampleState = {
     affection: state ? state.affection : 0,
@@ -1291,6 +1521,12 @@ function applyCharImport() {
   if (importContext === 'setup') {
     wizardLook = Object.assign({}, ch.look);
     wizardPersonality = ch.personality;
+    wizardCustom = (ch.personality === 'custom' || ch.customArt) ? {
+      customLabel: ch.customLabel,
+      basePersonality: ch.basePersonality,
+      customDialogue: ch.customDialogue,
+      customArt: ch.customArt
+    } : null;
     buildWizardControls();
     const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
     setVal('s-firstPerson', ch.firstPerson);
@@ -1310,6 +1546,10 @@ function applyCharImport() {
   state.character.suffix = ch.suffix;
   if (ch.callName) state.character.callName = ch.callName;
   state.character.look = Object.assign({}, ch.look);
+  state.character.customLabel     = ch.customLabel || null;
+  state.character.basePersonality = ch.basePersonality || null;
+  state.character.customDialogue  = ch.customDialogue || null;
+  state.character.customArt       = ch.customArt || null;
   saveState();
 
   closeCharImportModal();

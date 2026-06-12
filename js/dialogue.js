@@ -1135,19 +1135,43 @@
     return candidate;
   }
 
+  /** personality がプリセットならそれ、カスタムなら basePersonality (それも無ければ tsundere) */
+  function resolvePersonality(state) {
+    var ch = (state && state.character) || {};
+    if (DIALOGUE[ch.personality]) { return ch.personality; }
+    if (DIALOGUE[ch.basePersonality]) { return ch.basePersonality; }
+    return 'tsundere';
+  }
+
+  /** カスタムセリフ集のプール取り出し。配列 (全 tier 共通) と {low,mid,high} の両形式に対応 */
+  function customPool(entry, tier) {
+    if (!entry) { return null; }
+    if (Array.isArray(entry)) { return entry.length ? entry : null; }
+    var pool = entry[tier] || entry.low || entry.mid || entry.high;
+    return (Array.isArray(pool) && pool.length) ? pool : null;
+  }
+
   function get(situation, state, extra) {
     extra = extra || {};
-    var personality = (state && state.character && state.character.personality) || 'tsundere';
-    var pdata = DIALOGUE[personality] || DIALOGUE.tsundere;
-    var sitData = pdata[situation];
-    if (!sitData) {
-      // 未知の situation は idle で代替
-      sitData = pata_idle_fallback(pdata);
-    }
     var tier = (window.GameData && window.GameData.tierFor)
       ? window.GameData.tierFor(state ? state.affection : 0)
       : 'low';
-    var pool = sitData[tier] || sitData.low || sitData.mid || sitData.high;
+
+    // カスタムセリフ集 (インポートされたフルカスタム性格) を最優先
+    var custom = state && state.character && state.character.customDialogue;
+    var pool = (state && state.character && state.character.personality === 'custom' && custom)
+      ? customPool(custom[situation], tier)
+      : null;
+
+    if (!pool) {
+      var pdata = DIALOGUE[resolvePersonality(state)];
+      var sitData = pdata[situation];
+      if (!sitData) {
+        // 未知の situation は idle で代替
+        sitData = pata_idle_fallback(pdata);
+      }
+      pool = sitData[tier] || sitData.low || sitData.mid || sitData.high;
+    }
     var raw = pick(pool);
     if (raw == null) { return ''; }
     lastLine = raw;
@@ -1234,9 +1258,16 @@
 
   /** パラメーター上昇への褒めセリフを返す (suffix・プレースホルダ適用済み) */
   function praise(paramId, state) {
-    var p = (state && state.character && state.character.personality) || 'tsundere';
-    var data = PARAM_PRAISE[p] || PARAM_PRAISE.tsundere;
-    var pool = data[paramId] || data.grit;
+    var pool = null;
+    var custom = state && state.character && state.character.customDialogue;
+    if (state && state.character && state.character.personality === 'custom'
+        && custom && custom.praise) {
+      pool = customPool(custom.praise[paramId], 'low');
+    }
+    if (!pool) {
+      var data = PARAM_PRAISE[resolvePersonality(state)] || PARAM_PRAISE.tsundere;
+      pool = data[paramId] || data.grit;
+    }
     var raw = pick(pool);
     if (raw == null) { return ''; }
     lastLine = raw;
@@ -1247,6 +1278,7 @@
     get: get,
     format: format,
     praise: praise,
+    resolvePersonality: resolvePersonality,
     DIALOGUE: DIALOGUE
   };
 })();
