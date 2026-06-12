@@ -345,6 +345,10 @@
             <button class="btn-secondary" id="settings-art-upload-btn">📷 画像から作る</button>
             <button class="btn-secondary hidden" id="settings-art-revert-btn">↩️ パーツ編集に戻す</button>
           </div>
+          <div id="expr-manager" class="expr-manager hidden">
+            <p class="import-desc" style="margin:12px 0 6px">表情さべつ（スロットをタップして画像を登録。場面に合わせて切り替わります）</p>
+            <div id="expr-grid" class="expr-grid"></div>
+          </div>
         </div>
       </div>
 
@@ -481,6 +485,54 @@
       <button class="btn-secondary" id="de-reset">標準に戻す</button>
       <button class="btn-primary" id="de-save">保存</button>
     </div>
+  </div>
+</div>
+
+<!-- ===================== デートシナリオエディタ ===================== -->
+<div id="date-editor" class="de-overlay hidden">
+  <div class="de-header">
+    <button class="de-back-btn" id="ded-back">‹</button>
+    <div class="de-title" id="ded-title">おでかけ先を編集</div>
+  </div>
+  <div class="de-body">
+    <div class="ded-grid">
+      <div class="form-row">
+        <label for="ded-name">なまえ</label>
+        <input type="text" id="ded-name" maxlength="12" placeholder="例: 星空の丘">
+      </div>
+      <div class="form-row ded-icon-row">
+        <label for="ded-icon">アイコン</label>
+        <input type="text" id="ded-icon" maxlength="4" placeholder="🌌">
+      </div>
+    </div>
+    <div class="ded-grid">
+      <div class="form-row">
+        <label for="ded-price">価格 (🪙)</label>
+        <input type="number" id="ded-price" min="0" max="9999" inputmode="numeric">
+      </div>
+      <div class="form-row">
+        <label for="ded-aff">ごほうび親密度 (💛)</label>
+        <input type="number" id="ded-aff" min="0" max="100" inputmode="numeric">
+      </div>
+    </div>
+    <div class="form-row">
+      <label>解放レベル</label>
+      <div id="ded-level-select" class="chip-group"></div>
+    </div>
+    <div class="form-row">
+      <label>背景</label>
+      <div id="ded-bg-select" class="chip-group"></div>
+    </div>
+    <div class="form-row">
+      <label>台本（上から順に再生。{user} = 呼び名 / {me} = 一人称）</label>
+      <div id="ded-beats" class="ded-beats"></div>
+      <button class="btn-secondary de-entry-btn" id="ded-add-beat">＋ セリフ/ナレーションを追加</button>
+    </div>
+    <div class="de-actions">
+      <button class="btn-secondary" id="ded-preview">▶ ためす</button>
+      <button class="btn-primary" id="ded-save">保存</button>
+    </div>
+    <button class="btn-danger de-entry-btn hidden" id="ded-delete"></button>
   </div>
 </div>
 

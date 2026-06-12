@@ -2476,3 +2476,107 @@ input[type="color"] {
 }
 .de-actions > button { flex: 1; }
 .de-entry-btn { width: 100%; margin-top: 4px; }
+
+/* 表情差分マネージャ */
+.expr-manager.hidden { display: none; }
+.expr-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.expr-slot {
+  position: relative;
+  border: 1.5px dashed var(--border-mid);
+  border-radius: var(--r-sm);
+  padding: 4px 2px;
+  text-align: center;
+  cursor: pointer;
+  background: var(--surface);
+}
+.expr-slot.filled { border-style: solid; border-color: var(--pink); background: var(--pink-light); }
+.expr-thumb {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.expr-thumb svg, .expr-thumb img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.expr-plus { font-size: 20px; color: var(--text-muted); }
+.expr-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-soft);
+  margin-top: 2px;
+}
+.expr-del {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* デートシナリオエディタ */
+.ded-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ded-icon-row input { font-size: 18px; }
+.ded-beats { display: flex; flex-direction: column; gap: 8px; }
+.ded-beat-row {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 8px;
+}
+.ded-beat-side { display: flex; flex-direction: column; gap: 4px; align-items: center; flex-shrink: 0; }
+.ded-speaker-toggle {
+  border: 1.5px solid var(--pink-dark);
+  background: var(--pink-light);
+  color: var(--pink-dark);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 50px;
+  min-width: 48px;
+}
+.ded-speaker-toggle.narration {
+  border-color: var(--border-mid);
+  background: var(--surface2);
+  color: var(--text-muted);
+}
+.ded-beat-text {
+  flex: 1;
+  border: none;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  background: transparent;
+  color: var(--text);
+}
+.ded-beat-text:focus { outline: none; }
+.ded-beat-del { border: none; background: none; font-size: 13px; opacity: 0.55; padding: 4px 2px; }
+.spot-card { position: relative; }
+.spot-edit-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border: none;
+  background: none;
+  font-size: 14px;
+  opacity: 0.5;
+  padding: 4px;
+}
+.date-add-btn { width: 100%; margin-top: 4px; }

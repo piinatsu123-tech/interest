@@ -84,6 +84,8 @@ const DEFAULT_STATE = {
   },
   // 控えのキャラクター (アクティブは character/affection/memories に展開)
   roster: [],
+  // おでかけ先のカスタム (標準スポットの上書き+自作スポット)
+  customDates: [],
   // FocusFlow 連携 (同一オリジンの localStorage 'ff-tasks' を共有)
   ff: { enabled: true, initialized: false, rewardedIds: [] },
   lastVisit: null
@@ -112,6 +114,7 @@ function loadState() {
       if (!Array.isArray(state.tasks)) state.tasks = [];
       if (!Array.isArray(state.memories)) state.memories = [];
       if (!Array.isArray(state.roster)) state.roster = [];
+      if (!Array.isArray(state.customDates)) state.customDates = [];
     } else {
       state = JSON.parse(JSON.stringify(DEFAULT_STATE));
     }
@@ -124,7 +127,10 @@ function saveState() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
-    // localStorage 容量超過等は無視
+    // 容量超過 (画像立ち絵の入れすぎ等) は黙って失われると怖いので知らせる
+    if (typeof showToast === 'function') {
+      showToast('⚠️ 保存できません。画像立ち絵を減らしてください');
+    }
   }
 }
 
@@ -513,12 +519,21 @@ function repairCustomArtViewBox() {
 }
 
 // ─── キャラ立ち絵描画 ─────────────────────────────────────────
-/** customArt (SVG or 画像) の描画用 HTML。SVG はインポート時にサニタイズ済み、
-    dataUrl は保存時に形式検証済みなのでそのまま流し込める */
+/** 立ち絵素材 1 枚分の HTML (dataURL 画像 or サニタイズ済み SVG 文字列) */
+function artFragmentHTML(value) {
+  if (typeof value === 'string' && value.indexOf('data:image/') === 0) {
+    return `<img class="custom-art-img" src="${value}" alt="キャラクター">`;
+  }
+  return value; // sanitizeSVG 済みマークアップ
+}
+
+/** customArt の描画用 HTML。表情差分は SVG/画像を混在できる。
+    SVG はインポート時にサニタイズ済み、dataUrl は保存時に形式検証済み */
 function customArtHTML(art, expression) {
-  if (art.dataUrl) return `<img class="custom-art-img" src="${art.dataUrl}" alt="キャラクター">`;
   const ex = expression || 'normal';
-  return (art.expressions && art.expressions[ex]) || art.base;
+  const variant = art.expressions && art.expressions[ex];
+  if (variant) return artFragmentHTML(variant);
+  return artFragmentHTML(art.dataUrl || art.base);
 }
 
 function renderChara(containerId, expression) {
@@ -797,7 +812,7 @@ function renderDateSpots() {
     return;
   }
 
-  const spots = GameData.DATE_SPOTS;
+  const spots = effectiveDateSpots();
   const currentLv = (typeof GameData !== 'undefined') ? GameData.levelFor(state.affection).lv : 1;
 
   container.innerHTML = spots.map(spot => {
@@ -823,12 +838,230 @@ function renderDateSpots() {
           ${locked ? '🔒 ロック中' : noCoins ? 'コイン不足' : 'おでかけ！'}
         </button>
       </div>
+      <button class="spot-edit-btn" data-id="${esc(spot.id)}" aria-label="シナリオを編集">✏️</button>
     </div>`;
-  }).join('');
+  }).join('') + `
+    <button class="btn-secondary date-add-btn" id="date-add-btn">＋ あたらしいおでかけ先をつくる</button>`;
 
   container.querySelectorAll('.go-btn:not([disabled])').forEach(btn => {
     btn.addEventListener('click', () => startDate(btn.dataset.id));
   });
+  container.querySelectorAll('.spot-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => openDateEditor(btn.dataset.id));
+  });
+  const addBtn = document.getElementById('date-add-btn');
+  if (addBtn) addBtn.addEventListener('click', () => openDateEditor(null));
+}
+
+/** 標準スポット (customDates の同 id で上書き) + 自作スポット */
+function effectiveDateSpots() {
+  const builtins = (typeof GameData !== 'undefined') ? GameData.DATE_SPOTS : [];
+  const customs = state.customDates || [];
+  const byId = {};
+  customs.forEach(c => { byId[c.id] = c; });
+  const merged = builtins.map(b => byId[b.id] || b);
+  const extras = customs.filter(c => !builtins.some(b => b.id === c.id));
+  return merged.concat(extras);
+}
+
+// ─── デートシナリオエディタ ──────────────────────────────────────
+// 標準スポットの上書きも自作スポットも state.customDates に保存する。
+const DATE_BG_OPTIONS = [
+  { id: 'vn-cafe',      name: 'カフェ' },
+  { id: 'vn-cinema',    name: '夜・屋内' },
+  { id: 'vn-aquarium',  name: '水のなか' },
+  { id: 'vn-amusement', name: '青空' },
+  { id: 'vn-onsen',     name: '緑・自然' }
+];
+const DATE_CUSTOM_MAX = 12;
+
+let dateEdId = null;        // 編集中のスポット id (null = 新規)
+let dateEdBg = 'vn-cafe';
+let dateEdLevel = 1;
+let _dateEdReturnDraft = null; // 試し再生から戻るときの下書き
+
+function openDateEditor(spotId) {
+  const spot = spotId ? effectiveDateSpots().find(s => s.id === spotId) : null;
+  openDateEditorWithDraft(spot ? {
+    id: spot.id,
+    name: spot.name,
+    icon: spot.icon,
+    price: spot.price,
+    minLevel: spot.minLevel,
+    affection: spot.affection,
+    bgClass: spot.bgClass,
+    script: spot.script.map(b => ({
+      speaker: b.speaker === 'narration' ? 'narration' : 'char',
+      text: typeof b.text === 'string' ? b.text
+        : (typeof b.lines === 'string' ? b.lines : (b.lines && (b.lines[effectivePersonality()] || '')) || '')
+    }))
+  } : null);
+}
+
+/** 下書きオブジェクトからエディタを開く (試し再生からの復帰にも使う) */
+function openDateEditorWithDraft(draft) {
+  dateEdId = draft ? draft.id : null;
+  const isBuiltin = dateEdId && (typeof GameData !== 'undefined') && GameData.DATE_SPOTS.some(b => b.id === dateEdId);
+  const hasOverride = dateEdId && state.customDates.some(c => c.id === dateEdId);
+
+  document.getElementById('ded-title').textContent = draft ? `${draft.name}を編集` : 'あたらしいおでかけ先';
+  document.getElementById('ded-name').value  = draft ? draft.name : '';
+  document.getElementById('ded-icon').value  = draft ? draft.icon : '🌟';
+  document.getElementById('ded-price').value = draft ? draft.price : 200;
+  document.getElementById('ded-aff').value   = draft ? draft.affection : 30;
+  dateEdBg = (draft && draft.bgClass) || 'vn-cafe';
+  dateEdLevel = (draft && draft.minLevel) || 1;
+
+  buildChipGroup('ded-level-select',
+    [1, 2, 3, 4, 5, 6].map(n => ({ id: String(n), name: `Lv${n}` })),
+    String(dateEdLevel), v => { dateEdLevel = parseInt(v, 10); });
+  buildChipGroup('ded-bg-select', DATE_BG_OPTIONS, dateEdBg, v => { dateEdBg = v; });
+
+  dedRenderBeats(draft ? draft.script : [
+    { speaker: 'narration', text: '' },
+    { speaker: 'char', text: '' }
+  ]);
+
+  // 削除/標準に戻すボタン
+  const delBtn = document.getElementById('ded-delete');
+  if (isBuiltin && hasOverride) {
+    delBtn.textContent = '↩️ 標準のシナリオに戻す';
+    delBtn.classList.remove('hidden');
+  } else if (dateEdId && !isBuiltin) {
+    delBtn.textContent = '🗑️ このおでかけ先を削除';
+    delBtn.classList.remove('hidden');
+  } else {
+    delBtn.classList.add('hidden');
+  }
+
+  document.getElementById('date-editor').classList.remove('hidden');
+}
+
+function dedRenderBeats(beats) {
+  const el = document.getElementById('ded-beats');
+  el.innerHTML = '';
+  beats.forEach(b => dedAppendBeat(b.speaker, b.text));
+}
+
+function dedAppendBeat(speaker, text) {
+  const el = document.getElementById('ded-beats');
+  if (el.children.length >= 12) {
+    showToast('台本は 12 コマまでです');
+    return;
+  }
+  const row = document.createElement('div');
+  row.className = 'ded-beat-row';
+  row.dataset.speaker = speaker || 'char';
+  row.innerHTML = `
+    <div class="ded-beat-side">
+      <button class="ded-speaker-toggle"></button>
+      <button class="ded-beat-del" aria-label="削除">🗑️</button>
+    </div>
+    <textarea class="ded-beat-text" rows="2" maxlength="300"></textarea>`;
+  const toggle = row.querySelector('.ded-speaker-toggle');
+  const syncToggle = () => {
+    const isNarr = row.dataset.speaker === 'narration';
+    toggle.textContent = isNarr ? 'ナレ' : 'キャラ';
+    toggle.classList.toggle('narration', isNarr);
+  };
+  syncToggle();
+  toggle.addEventListener('click', () => {
+    row.dataset.speaker = row.dataset.speaker === 'narration' ? 'char' : 'narration';
+    syncToggle();
+  });
+  row.querySelector('.ded-beat-del').addEventListener('click', () => row.remove());
+  row.querySelector('.ded-beat-text').value = text || '';
+  el.appendChild(row);
+}
+
+/** フォームから下書きを組み立てる。不正なら null (トーストで通知) */
+function dedCollectDraft() {
+  const name = document.getElementById('ded-name').value.trim().slice(0, 12);
+  if (!name) {
+    showToast('なまえを入れてください');
+    return null;
+  }
+  const icon = (document.getElementById('ded-icon').value.trim() || '🌟').slice(0, 4);
+  const price = Math.max(0, Math.min(9999, parseInt(document.getElementById('ded-price').value, 10) || 0));
+  const affection = Math.max(0, Math.min(100, parseInt(document.getElementById('ded-aff').value, 10) || 0));
+  const script = [...document.querySelectorAll('#ded-beats .ded-beat-row')]
+    .map(row => ({
+      speaker: row.dataset.speaker === 'narration' ? 'narration' : 'char',
+      text: row.querySelector('.ded-beat-text').value.trim().slice(0, 300)
+    }))
+    .filter(b => b.text);
+  if (!script.length) {
+    showToast('台本を 1 コマ以上書いてください');
+    return null;
+  }
+  const draft = {
+    id: dateEdId || ('cd-' + uid()),
+    name, icon, price, affection,
+    minLevel: dateEdLevel,
+    bgClass: dateEdBg,
+    script
+  };
+  // 標準スポットの上書きは statReq (ステータス解放条件) を引き継ぐ
+  if (typeof GameData !== 'undefined') {
+    const builtin = GameData.DATE_SPOTS.find(b => b.id === draft.id);
+    if (builtin && builtin.statReq) draft.statReq = builtin.statReq;
+  }
+  return draft;
+}
+
+function dedSave() {
+  const draft = dedCollectDraft();
+  if (!draft) return;
+  const idx = state.customDates.findIndex(c => c.id === draft.id);
+  if (idx >= 0) {
+    state.customDates[idx] = draft;
+  } else {
+    if (state.customDates.length >= DATE_CUSTOM_MAX) {
+      showToast(`カスタムは${DATE_CUSTOM_MAX}件までです`);
+      return;
+    }
+    state.customDates.push(draft);
+  }
+  saveState();
+  closeDateEditor();
+  renderDateSpots();
+  showToast(`💾 「${draft.name}」を保存しました`);
+}
+
+function dedPreview() {
+  const draft = dedCollectDraft();
+  if (!draft) return;
+  _dateEdReturnDraft = draft;
+  closeDateEditor();
+  // 試し再生 (コイン消費・報酬なし)
+  vnState = { spot: draft, beatIndex: 0, preview: true };
+  document.getElementById('screen-main').classList.add('hidden');
+  const vnScreen = document.getElementById('screen-date-vn');
+  vnScreen.classList.remove('hidden');
+  const vnBg = document.getElementById('vn-bg');
+  if (vnBg) vnBg.className = `vn-bg ${esc(draft.bgClass || '')}`;
+  renderVNBeat();
+}
+
+function dedDelete() {
+  const isBuiltin = (typeof GameData !== 'undefined') && GameData.DATE_SPOTS.some(b => b.id === dateEdId);
+  const doIt = () => {
+    state.customDates = state.customDates.filter(c => c.id !== dateEdId);
+    saveState();
+    closeDateEditor();
+    renderDateSpots();
+    showToast(isBuiltin ? '標準のシナリオに戻しました' : '削除しました');
+  };
+  if (isBuiltin) {
+    doIt(); // 上書き解除は破壊的でないので即時
+  } else {
+    showConfirm('削除しますか?', `「${document.getElementById('ded-name').value}」のシナリオが消えます。`, '削除する', doIt);
+  }
+}
+
+function closeDateEditor() {
+  document.getElementById('date-editor').classList.add('hidden');
+  dateEdId = null;
 }
 
 // ─── デート VN ────────────────────────────────────────────────
@@ -849,7 +1082,7 @@ function statReqLabel(spot) {
 
 function startDate(spotId) {
   if (typeof GameData === 'undefined') return;
-  const spot = GameData.DATE_SPOTS.find(s => s.id === spotId);
+  const spot = effectiveDateSpots().find(s => s.id === spotId);
   if (!spot) return;
   if (state.coins < spot.price) return;
   if (GameData.levelFor(state.affection).lv < spot.minLevel || !spotStatOk(spot)) return;
@@ -885,16 +1118,21 @@ function renderVNBeat() {
   const speakerEl = document.getElementById('vn-speaker');
   const textEl    = document.getElementById('vn-text');
 
+  // カスタム台本は beat.text (共通文字列)、標準は beat.lines (性格別 or 共通)
+  const rawFor = (b) => {
+    if (typeof b.text === 'string') return b.text;
+    if (typeof b.lines === 'string') return b.lines;
+    return (b.lines && b.lines[personality]) || '';
+  };
+
   if (beat.speaker === 'narration') {
     if (speakerEl) speakerEl.textContent = '';
-    const raw = typeof beat.lines === 'string' ? beat.lines : (beat.lines[personality] || '');
-    const formatted = (typeof Dialogue !== 'undefined') ? Dialogue.format(raw, state) : raw;
+    const formatted = (typeof Dialogue !== 'undefined') ? Dialogue.format(rawFor(beat), state) : rawFor(beat);
     if (textEl) textEl.textContent = formatted;
     renderChara('vn-chara', 'normal');
   } else {
     if (speakerEl) speakerEl.textContent = state.character.name;
-    const raw = (beat.lines && beat.lines[personality]) ? beat.lines[personality] : '';
-    const formatted = (typeof Dialogue !== 'undefined') ? Dialogue.format(raw, state) : raw;
+    const formatted = (typeof Dialogue !== 'undefined') ? Dialogue.format(rawFor(beat), state) : rawFor(beat);
     if (textEl) textEl.textContent = formatted;
     // 表情
     const expr = beatIndex === 0 ? 'smile' : beatIndex % 3 === 0 ? 'blush' : 'smile';
@@ -911,6 +1149,21 @@ function advanceVN() {
 function endDate() {
   if (!vnState) return;
   const spot = vnState.spot;
+  const wasPreview = !!vnState.preview;
+
+  if (wasPreview) {
+    // 試し再生: 報酬も記録もなし、エディタへ戻る
+    vnState = null;
+    document.getElementById('screen-date-vn').classList.add('hidden');
+    document.getElementById('screen-main').classList.remove('hidden');
+    switchTab('date');
+    if (_dateEdReturnDraft) {
+      openDateEditorWithDraft(_dateEdReturnDraft);
+      _dateEdReturnDraft = null;
+    }
+    return;
+  }
+
   const prevAff = state.affection;
   state.affection += spot.affection;
   state.stats.totalDates++;
@@ -1221,6 +1474,9 @@ function initSettingsTab() {
   const artRevert = document.getElementById('settings-art-revert-btn');
   if (artRevert) artRevert.classList.toggle('hidden', !(ch.customArt && (ch.customArt.base || ch.customArt.dataUrl)));
 
+  // 表情差分マネージャ
+  renderExprGrid();
+
   // 性格 (フルカスタムをインポート済みならそのカードも出す)
   buildPersonalityGrid('settings-personality-grid', ch.personality, v => {
     state.character.personality = v;
@@ -1281,19 +1537,99 @@ function processArtFile(file, cb) {
   reader.readAsDataURL(file);
 }
 
+function openArtPicker(context) {
+  artUploadContext = context;
+  const artInput = document.getElementById('art-file-input');
+  if (artInput) {
+    artInput.value = '';
+    artInput.click();
+  }
+}
+
 function handleArtFileSelected(file) {
   processArtFile(file, dataUrl => {
     if (artUploadContext === 'setup') {
       wizardCustom = Object.assign({}, wizardCustom, { customArt: { dataUrl } });
       renderWizardPreview();
-    } else {
-      state.character.customArt = { dataUrl };
-      saveState();
-      renderChara('home-chara', 'smile');
-      initSettingsTab();
-      showBubble('イメチェン、どうかな?');
+      showToast('📷 立ち絵を設定しました');
+      return;
     }
+    if (artUploadContext.indexOf('expr:') === 0) {
+      // 表情差分 (or きほん差し替え)
+      const ex = artUploadContext.slice(5);
+      const art = state.character.customArt || {};
+      if (ex === 'base') {
+        art.dataUrl = dataUrl;
+        delete art.base; // SVG きほんを画像に差し替えた場合
+      } else {
+        art.expressions = art.expressions || {};
+        art.expressions[ex] = dataUrl;
+      }
+      state.character.customArt = art;
+      saveState();
+      renderChara('home-chara', ex === 'base' ? 'smile' : ex);
+      renderExprGrid();
+      showToast(`📷 ${ex === 'base' ? 'きほん' : (EXPR_LABELS[ex] || ex)}の立ち絵を設定しました`);
+      return;
+    }
+    state.character.customArt = { dataUrl };
+    saveState();
+    renderChara('home-chara', 'smile');
+    initSettingsTab();
+    showBubble('イメチェン、どうかな?');
     showToast('📷 立ち絵を設定しました');
+  });
+}
+
+// ─── 表情差分マネージャ (画像/SVG 立ち絵の表情登録) ──────────────
+const EXPR_LABELS = {
+  normal: 'きほん', smile: 'にっこり', joy: 'よろこび', blush: 'てれ',
+  pout: 'ぷんすか', sad: 'しょんぼり', surprised: 'びっくり', sleepy: 'おねむ'
+};
+const EXPR_SLOTS = ['smile', 'joy', 'blush', 'pout', 'sad', 'surprised', 'sleepy'];
+
+function renderExprGrid() {
+  const wrap = document.getElementById('expr-manager');
+  const grid = document.getElementById('expr-grid');
+  if (!wrap || !grid) return;
+  const art = state.character.customArt;
+  const has = !!(art && (art.dataUrl || art.base));
+  wrap.classList.toggle('hidden', !has);
+  if (!has) return;
+
+  let html = `<div class="expr-slot filled" data-ex="base">
+    <div class="expr-thumb">${artFragmentHTML(art.dataUrl || art.base)}</div>
+    <span class="expr-label">きほん</span>
+  </div>`;
+  html += EXPR_SLOTS.map(ex => {
+    const v = art.expressions && art.expressions[ex];
+    return `<div class="expr-slot${v ? ' filled' : ''}" data-ex="${ex}">
+      <div class="expr-thumb">${v ? artFragmentHTML(v) : '<span class="expr-plus">＋</span>'}</div>
+      <span class="expr-label">${EXPR_LABELS[ex]}</span>
+      ${v ? `<button class="expr-del" data-ex="${ex}" aria-label="削除">✕</button>` : ''}
+    </div>`;
+  }).join('');
+  grid.innerHTML = html;
+
+  grid.querySelectorAll('.expr-slot').forEach(slot => {
+    slot.addEventListener('click', e => {
+      if (e.target.classList.contains('expr-del')) return;
+      openArtPicker('expr:' + slot.dataset.ex);
+    });
+  });
+  grid.querySelectorAll('.expr-del').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const art2 = state.character.customArt;
+      if (art2 && art2.expressions) {
+        delete art2.expressions[btn.dataset.ex];
+        if (!Object.keys(art2.expressions).length) delete art2.expressions;
+      }
+      saveState();
+      renderExprGrid();
+      renderChara('home-chara', 'smile');
+      showToast('表情を削除しました');
+    });
   });
 }
 
@@ -2261,15 +2597,8 @@ function bindEvents() {
   const importText = document.getElementById('char-import-text');
   if (importText) importText.addEventListener('input', refreshCharImportPreview);
 
-  // 画像アップロード (せってい/ウィザード共用のファイル入力)
+  // 画像アップロード (せってい/ウィザード/表情差分 共用のファイル入力)
   const artInput = document.getElementById('art-file-input');
-  const openArtPicker = (context) => {
-    artUploadContext = context;
-    if (artInput) {
-      artInput.value = '';
-      artInput.click();
-    }
-  };
   if (artInput) artInput.addEventListener('change', () => {
     if (artInput.files && artInput.files[0]) handleArtFileSelected(artInput.files[0]);
   });
@@ -2281,6 +2610,13 @@ function bindEvents() {
   // 複数キャラ: 追加・ウィザード中止
   bind('roster-add-btn',    startAddCharacter);
   bind('wizard-cancel-btn', cancelAddCharacter);
+
+  // デートシナリオエディタ
+  bind('ded-back',     closeDateEditor);
+  bind('ded-add-beat', () => dedAppendBeat('char', ''));
+  bind('ded-save',     dedSave);
+  bind('ded-preview',  dedPreview);
+  bind('ded-delete',   dedDelete);
 
   // セリフエディタ
   bind('dialogue-editor-btn', openDialogueEditor);
