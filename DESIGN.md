@@ -8,7 +8,7 @@
 - バニラ JS / HTML / CSS のみ。ビルドツール・外部依存・外部通信なし。`file://` で開いても動くこと
 - 永続化は `localStorage` キー `isshogurashi_v1`(JSON 一括保存)
 - UI は日本語。ユーザー入力は必ずエスケープして表示(XSS 対策。`textContent` か専用 `esc()` を使う)
-- スクリプト読み込み順: `js/character.js` → `js/gamedata.js` → `js/dialogue.js` → `js/app.js`
+- スクリプト読み込み順: `js/character.js` → `js/gamedata.js` → `js/dialogue.js` → `js/focusflow.js` → `js/app.js`
 - 各ファイルは `window.*` のグローバル名前空間 1 つだけを公開する
 
 ## ファイル構成と担当
@@ -20,7 +20,8 @@
 | `js/character.js` | SVG 立ち絵レンダラー | `CharacterArt` |
 | `js/gamedata.js` | 経済・レベル・プレゼント・デートの定義データ | `GameData` |
 | `js/dialogue.js` | セリフエンジン+セリフデータ | `Dialogue` |
-| `js/app.js` | 状態管理・画面遷移・タスク・UI ロジック全部 | `App`(任意) |
+| `js/focusflow.js` | FocusFlow タスクシステム移植版 | `FFX` |
+| `js/app.js` | 状態管理・画面遷移・報酬・UI ロジック | `App` |
 
 ## 状態スキーマ(localStorage)
 
@@ -44,12 +45,8 @@
   affection: 0,                              // 親密度(累積、減らない)
   coins: 0,
   streak: { current: 0, best: 0, lastAllDoneDate: null },  // 'YYYY-MM-DD'
-  tasks: [{
-    id, title,
-    difficulty: 'easy'|'normal'|'hard',
-    repeat: null | 'daily' | ['mon','tue',...],  // 繰り返し(null=単発)
-    done: false, doneAt: null, createdAt
-  }],
+  tasks: [],                                 // 旧形式 (移行後は常に空。タスクは ff-tasks へ)
+  ff: { enabled, initialized, migrated, rewardedIds: [] },  // FocusFlow 統合の管理
   memories: [{ date, type: 'gift'|'date'|'levelup', label }],  // 新しい順
   stats: { totalCompleted: 0, totalCoinsEarned: 0, totalGifts: 0, totalDates: 0 },
   lastVisit: 'YYYY-MM-DD'
@@ -148,7 +145,7 @@ SPA。`<section>` 切り替え方式。ナビは下部タブバー。
    - Step2 性格と話し方: 性格 5 択(説明+サンプルセリフ表示)、一人称・語尾(任意)入力
    - Step3 なまえ: キャラの名前、プレイヤー名、呼ばれたい名前 → 完了で `setup_first` のセリフと共にホームへ
 2. **ホーム**: 部屋背景(時間帯 morning/day/evening/night で CSS グラデ変化)+立ち絵(クリックで `idle`)+吹き出し+ステータスバー(レベル・コイン・ストリーク)+今日のタスククイックリスト(チェックで完了)
-3. **タスク**: 一覧・追加・編集・削除。難易度 3 択、繰り返し(なし/毎日/曜日指定)。完了時はコイン・親密度付与+ホームに戻ってリアクション表示
+3. **タスク**: FocusFlow 移植版(上記「FocusFlow 統合」参照)。完了時はコイン・親密度付与+キャラのリアクション
 4. **プレゼント**: GIFTS のショップ。購入→キャラのリアクション(reactions から抽選、表情 joy/blush)+memories 記録
 5. **おでかけ(デート)**: DATE_SPOTS 一覧(価格と必要レベル、未達はロック表示)。選ぶと全画面のビジュアルノベル風シーン: 背景(bgClass)+立ち絵+script をクリックで送る → 終了後 affection 付与+memories 記録
 6. **きろく**: レベル(進捗バー)、ストリーク、累計統計、思い出タイムライン(memories)
@@ -161,26 +158,34 @@ SPA。`<section>` 切り替え方式。ナビは下部タブバー。
 - **日付ロールオーバー**(起動時と `visibilitychange` で判定): `lastVisit` と今日が違えば、繰り返しタスクの `done` をリセット(曜日指定は該当曜日のみ表示対象)。単発タスクの完了済みは非表示化(アーカイブ)。2 日以上空いていたら挨拶を `comeback` に差し替え
 - **表情の使い分け**: 通常 normal/smile、完了 joy、プレゼント joy/blush、has_overdue は pout/sad、夜 sleepy など状況に連動
 
-## FocusFlow 連携(app.js)
+## FocusFlow 統合(js/focusflow.js)
 
-同じユーザーの別アプリ **FocusFlow**(`piinatsu123-tech/focusflow1`)とタスクを連携する。
-両アプリが同一オリジン(例: `https://piinatsu123-tech.github.io/` 配下)で公開されている前提で、
-FocusFlow の localStorage キー **`ff-tasks`** を直接読み書きする。バックエンド不要。
+**FocusFlow**(`piinatsu123-tech/focusflow1` v5.2)のタスクシステムを丸ごと移植し、
+タスク管理を完全に統合した。「タスク」タブの中身は FocusFlow の UI そのもの。
 
-- **タスク形式**: `{ id, text, done, urgency: 'must'|'want'|'nice'|'scheduled', steps, estimate }`
-- **表示**: ホームのクイックリストとタスクタブに「⚡ FocusFlow」セクションとして未完了分を表示。
-  `scheduled`(後日実行予定)は除外。編集・削除は FocusFlow 側で行う(こちらは完了のみ)
-- **報酬マッピング**: `must`→hard / `want`→normal / `nice`→easy(ECONOMY 準拠)
-- **こちらで完了**: `ff-tasks` に `done: true` を書き戻し(steps も done に)、FocusFlow 本体の
-  `save()` と同様に Worker `/sync` へも best-effort で POST(LINE の「一覧」用)
-- **FocusFlow 側で完了**: 起動時(800ms 遅延)・`visibilitychange`・`storage` イベントで検知し、
-  まとめて報酬付与+キャラのリアクション。付与済み ID は `state.ff.rewardedIds` で管理し、
-  FocusFlow 側で削除されたタスクの ID は掃除する
-- **初回連携時**: その時点で完了済みのタスクは報酬対象にしない(`state.ff.initialized`)
-- **全完了判定**: ネイティブ+FocusFlow(非 scheduled)の合算。`handleAllDone` は
-  `lastAllDoneDate === today` なら何もしない(同日二重付与防止)
-- **せってい**: 連携オン/オフのトグルと接続状態の表示。`ff-tasks` キーが無い環境では
-  自動的に無効(状態スキーマに `ff: { enabled, initialized, rewardedIds }` を追加)
+- **移植範囲**: メイン画面(タイムバー+緊急度グループ)、すべてタブ(期日タイムライン+
+  削除モード)、グループ詳細(スワイプ削除)、集中モード(タイマーリング+ステップ進行)、
+  タスク/ステップ編集画面、アクションシート、LINE ボット取り込み(Worker `/tasks`)、
+  Worker `/sync` 同期、クリップボード JSON インポート
+- **名前空間**: クラス/ID の衝突回避に `ffx-` プレフィックス
+  (`screen`→`ffx-screen` 等 6 クラス+画面 ID)。CSS 変数は `.ffx` スコープで上書き。
+  公開 API は `window.FFX`(inline onclick と app.js 連携用)
+- **データ**: localStorage `ff-tasks`(FocusFlow と同一形式
+  `{id, title, done, urgency: must|want|nice|scheduled, steps, estimate, dueDate?, scheduledDate?}`)。
+  いっしょぐらし独自のタスクモデルは廃止し、初回起動時に未完了分を自動移行
+  (difficulty hard→must / normal→want / easy→nice。`state.ff.migrated`)
+- **追加機能**: ヘッダーの「＋追加」ボタンから新規タスク作成(本家は LINE 取り込みのみ)。
+  タイトル未入力で戻ったら破棄
+- **報酬経路の一元化**: FFX の `save()` が毎回 `App.onTasksChanged()` を呼ぶ →
+  `ffCheckExternalCompletions()` が rewardedIds との差分で新規完了を検知して
+  コイン・親密度付与+キャラのリアクション。アプリ内完了・集中モード完了・
+  LINE 取り込み後の完了・別タブからの完了がすべて同じ経路で処理される
+- **報酬マッピング**: must→hard / want→normal / nice→easy(ECONOMY 準拠)。
+  新規タスク追加時は `task_add` のセリフで反応
+- **全完了判定**: 非 scheduled のタスクが 1 件以上あり全部 done。
+  `handleAllDone` は同日 2 回目以降は何もしない
+- **ホーム**: クイックリストに未完了タスク(非 scheduled)を緊急度バッジ付きで表示。
+  チェックは `FFX.toggleDone()` 経由
 
 ## ビジュアルトーン
 

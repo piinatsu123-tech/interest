@@ -167,54 +167,45 @@
     </div>
   </section>
 
-  <!-- タスク -->
-  <section id="tab-tasks" class="tab-section hidden">
-    <div class="page-header">
-      <h2 class="page-title">📋 タスク</h2>
-      <button class="btn-primary btn-sm" id="task-add-btn">+ 追加</button>
-    </div>
-    <div id="task-list" class="task-list"></div>
+  <!-- タスク (FocusFlow) -->
+  <section id="tab-tasks" class="tab-section ffx hidden">
+    <div class="ffx-embed" id="ffx-screen-main">
+      <div class="main-header">
+        <div class="app-title">FocusFlow</div>
+        <div class="date-badge" id="dateBadge"></div>
+        <div class="version-badge" id="versionBadge"></div>
+        <button class="ffx-add-btn" onclick="FFX.openNewTask()" aria-label="タスクを追加">＋追加</button>
+      </div>
 
-    <!-- タスク追加/編集 モーダル -->
-    <div id="task-modal" class="modal-overlay hidden">
-      <div class="modal">
-        <div class="modal-header">
-          <h3 id="task-modal-title">タスクを追加</h3>
-          <button class="btn-icon-close" id="task-modal-close">✕</button>
-        </div>
-        <div class="form-group">
-          <label>タイトル</label>
-          <input type="text" id="task-form-title" placeholder="例: 運動する" maxlength="40">
-        </div>
-        <div class="form-group">
-          <label>難易度</label>
-          <div class="chip-group" id="task-difficulty-select">
-            <button class="chip" data-value="easy">かんたん +10🪙</button>
-            <button class="chip active" data-value="normal">ふつう +20🪙</button>
-            <button class="chip" data-value="hard">むずかしい +40🪙</button>
+      <div class="ffx-tabbar">
+        <button class="ffx-tabbtn active" id="tab-btn-home" onclick="FFX.switchTab('home')">ホーム</button>
+        <button class="ffx-tabbtn" id="tab-btn-all" onclick="FFX.switchTab('all')">すべて</button>
+      </div>
+
+      <!-- HOME TAB -->
+      <div class="tab-content visible" id="ffx-tab-home">
+        <div class="time-bar-wrap">
+          <div class="time-bar-label">
+            <span class="time-bar-remaining">今日の残り <strong id="timeBarRemaining">0.0</strong>h</span>
+            <span class="time-bar-total" id="timeBarTotal">/ 0.0h</span>
+          </div>
+          <div class="time-bar-track">
+            <div class="time-bar-fill" id="timeBarFill" style="width:0%"></div>
           </div>
         </div>
-        <div class="form-group">
-          <label>くりかえし</label>
-          <div class="chip-group" id="task-repeat-select">
-            <button class="chip active" data-value="none">なし</button>
-            <button class="chip" data-value="daily">毎日</button>
-            <button class="chip" data-value="weekday">曜日指定</button>
-          </div>
+        <div class="scroll">
+          <div class="group-rows" id="mainGroups"></div>
         </div>
-        <div id="task-weekday-picker" class="weekday-picker hidden">
-          <button class="day-btn" data-day="mon">月</button>
-          <button class="day-btn" data-day="tue">火</button>
-          <button class="day-btn" data-day="wed">水</button>
-          <button class="day-btn" data-day="thu">木</button>
-          <button class="day-btn" data-day="fri">金</button>
-          <button class="day-btn" data-day="sat">土</button>
-          <button class="day-btn" data-day="sun">日</button>
+      </div>
+
+      <!-- ALL TAB -->
+      <div class="tab-content" id="tab-all">
+        <div id="timelineContainer" style="padding: 12px 20px 0; display:none;"></div>
+        <div style="display:flex;justify-content:flex-end;padding:8px 20px 4px;">
+          <button id="deleteModeBtn" onclick="FFX.toggleDeleteMode()"
+            style="border:1.5px solid var(--border-strong);background:none;font-size:14px;font-weight:700;cursor:pointer;padding:4px 12px;border-radius:50px;color:var(--text3);font-family:'Noto Sans JP',sans-serif;transition:all .15s;">🗑 削除</button>
         </div>
-        <div class="modal-actions">
-          <button class="btn-secondary" id="task-form-cancel">キャンセル</button>
-          <button class="btn-primary" id="task-form-save">保存</button>
-        </div>
+        <div class="scroll" id="allTasksScroll"></div>
       </div>
     </div>
   </section>
@@ -363,18 +354,6 @@
 
       <button class="btn-primary settings-save-btn" id="settings-save">保存する</button>
 
-      <div class="settings-section">
-        <h3 class="settings-section-title">れんけい</h3>
-        <label class="ff-toggle-row">
-          <div class="ff-toggle-text">
-            <div class="ff-toggle-title">⚡ FocusFlow 連携</div>
-            <p class="ff-toggle-desc">FocusFlow のタスクをここに表示して、完了するとコインと親密度がもらえます。</p>
-          </div>
-          <input type="checkbox" id="ff-enabled-toggle" class="ff-switch">
-        </label>
-        <p id="ff-status" class="ff-status"></p>
-      </div>
-
       <div class="settings-section danger-zone">
         <h3 class="settings-section-title danger-title">⚠️ データリセット</h3>
         <p class="danger-desc">すべてのデータが消えます。この操作は取り消せません。</p>
@@ -455,9 +434,119 @@
   </div>
 </div>
 
+
+<!-- ===================== FocusFlow サブ画面 (グループ/集中/編集) ===================== -->
+<div class="ffx" id="ffx-overlays">
+<div class="ffx-screen" id="ffx-screen-group">
+  <div class="screen-header">
+    <button class="back-btn" onclick="FFX.goBack('group')">‹</button>
+    <div class="header-title" id="groupHeaderTitle"></div>
+    <div class="header-sub" id="groupHeaderSub"></div>
+  </div>
+  <div class="scroll">
+    <div class="ffx-task-list" id="groupTaskList"></div>
+  </div>
+</div>
+
+<!-- ════ SCREEN: FOCUS ════ -->
+<div class="ffx-screen" id="ffx-screen-focus">
+  <div class="screen-header">
+    <button class="back-btn" onclick="FFX.goBack('focus')">‹</button>
+    <div class="header-title">集中モード</div>
+  </div>
+  <div class="focus-body">
+    <div class="focus-task-title" id="focusTaskTitle"></div>
+    <div class="focus-step-widget" id="focusStepWidget" style="display:none"></div>
+    <div class="timer-ring-wrap">
+      <div class="timer-ring" id="timerRing"></div>
+      <!-- ドットSVG：赤弧の先端(r=81、12時位置)に白ドットを置いて回転 -->
+      <svg class="timer-arrow-svg" viewBox="0 0 180 180">
+        <circle id="timerDot" cx="90" cy="9" r="6"
+                fill="white" stroke="#c0392b" stroke-width="2"/>
+      </svg>
+      <div class="timer-inner" onclick="FFX.toggleTimer()">
+        <div class="timer-display" id="timerDisplay">00:00</div>
+        <div class="timer-hint" id="timerHint">タップで開始</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ SCREEN: STEP DETAIL EDIT ════ -->
+<div class="ffx-screen" id="ffx-screen-step-edit" style="z-index:185;">
+  <div class="screen-header">
+    <button class="back-btn" onclick="FFX.closeStepDetail()">‹</button>
+    <div class="header-title">ステップを編集</div>
+  </div>
+  <div class="scroll" style="padding: 24px 20px 0;">
+    <div class="edit-section-label">内容</div>
+    <textarea class="step-detail-text" id="stepDetailText" placeholder="ステップの内容を入力"></textarea>
+    <div class="step-detail-mins-wrap">
+      <span class="step-detail-mins-label">推定</span>
+      <input class="step-detail-mins" id="stepDetailMins" inputmode="numeric" placeholder="0">
+      <span class="step-detail-mins-label">分</span>
+    </div>
+    <div class="edit-save-sticky">
+      <button class="edit-save-btn" onclick="FFX.saveStepDetail()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ════ ACTION SHEET ════ -->
+<div class="action-overlay" id="actionOverlay" onclick="FFX.closeActionSheet()">
+  <div class="action-sheet" onclick="event.stopPropagation()">
+    <div class="action-sheet-handle"></div>
+    <div class="action-sheet-title" id="actionTitle"></div>
+    <button class="action-btn" onclick="FFX.actionEdit()">✏️ 編集</button>
+    <div class="action-section-label">優先度</div>
+    <div class="action-urgency-row">
+      <button class="action-urgency-btn" id="aub-must" onclick="FFX.actionSetUrgency('must')">今日中に絶対</button>
+      <button class="action-urgency-btn" id="aub-want" onclick="FFX.actionSetUrgency('want')">できたら</button>
+      <button class="action-urgency-btn" id="aub-nice" onclick="FFX.actionSetUrgency('nice')">余力があれば</button>
+      <button class="action-urgency-btn" id="aub-scheduled" onclick="FFX.actionSetUrgency('scheduled')">後日実行予定</button>
+    </div>
+    <button class="action-btn danger" onclick="FFX.actionDelete()">🗑 削除</button>
+    <button class="action-cancel" onclick="FFX.closeActionSheet()">キャンセル</button>
+  </div>
+</div>
+
+<!-- ════ SCREEN: EDIT ════ -->
+<div class="ffx-screen" id="ffx-screen-edit" style="z-index:175;">
+  <div class="screen-header">
+    <button class="back-btn" onclick="FFX.closeEditScreen()">‹</button>
+    <div class="header-title">タスクを編集</div>
+  </div>
+  <div class="scroll" id="editScroll">
+    <div class="edit-section">
+      <div class="edit-section-label">タイトル</div>
+      <input class="edit-title-input" id="editTaskTitle" placeholder="タスクのタイトル">
+    </div>
+    <div class="edit-section" style="margin-top:16px;">
+      <div class="edit-section-label">期日（任意）</div>
+      <input class="edit-due-input" id="editDueDate" type="date">
+    </div>
+    <div class="edit-section" style="margin-top:16px;">
+      <div class="edit-section-label">実行日（後日実行予定の場合）</div>
+      <input class="edit-due-input" id="editScheduledDate" type="date">
+    </div>
+    <div class="edit-section" style="margin-top:20px;">
+      <div class="edit-section-label">ステップ</div>
+      <button class="add-step-btn" onclick="FFX.addEditStep()" style="margin-bottom:8px;">＋ ステップを追加</button>
+      <div class="step-edit-list" id="stepEditList"></div>
+    </div>
+    <div class="edit-save-sticky">
+      <button class="edit-save-btn" onclick="FFX.saveEdit()">保存</button>
+    </div>
+  </div>
+</div>
+</div>
+
 <script src="js/character.js"></script>
 <script src="js/gamedata.js"></script>
 <script src="js/dialogue.js"></script>
+<script src="js/focusflow.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

@@ -133,56 +133,21 @@ function doRollover() {
   const wasAway = state.lastVisit !== null &&
     (new Date(today) - new Date(state.lastVisit)) / 86400000 >= 2;
 
-  const todayDow = DAY_KEYS[new Date().getDay()];
-
-  // タスクのリセット
-  state.tasks = state.tasks.filter(t => {
-    // 単発タスクで完了済み → 非表示 (除去)
-    if (t.repeat === null && t.done) return false;
-    return true;
-  }).map(t => {
-    // 繰り返しタスクのリセット
-    if (t.repeat === 'daily') {
-      return Object.assign({}, t, { done: false, doneAt: null });
-    }
-    if (Array.isArray(t.repeat)) {
-      // 曜日指定: 今日が対象曜日なら done リセット
-      if (t.repeat.includes(todayDow)) {
-        return Object.assign({}, t, { done: false, doneAt: null });
-      }
-    }
-    return t;
-  });
-
+  // タスクは FocusFlow システム (ff-tasks) が管理するためここでは触らない
   state.lastVisit = today;
   saveState();
   return wasAway;
 }
 
-// ─── 今日表示すべきタスクを返す ─────────────────────────────────
-function getTodayTasks() {
-  const todayDow = DAY_KEYS[new Date().getDay()];
-  return state.tasks.filter(t => {
-    if (t.repeat === null) return true;               // 単発は常に
-    if (t.repeat === 'daily') return true;            // 毎日
-    if (Array.isArray(t.repeat)) return t.repeat.includes(todayDow); // 曜日指定
-    return true;
-  });
-}
-
-// ─── FocusFlow 連携 ────────────────────────────────────────────
-// 同一オリジン (例: piinatsu123-tech.github.io) で公開された FocusFlow と
-// localStorage キー 'ff-tasks' を直接共有する。タスクの編集は FocusFlow 側、
-// 完了の検知と報酬付与をこちらで行う。
+// ─── FocusFlow タスクシステム連携 ────────────────────────────────
+// タスクの管理 UI とデータ書き込みは js/focusflow.js (FocusFlow 移植版) が
+// 担当する (localStorage キー 'ff-tasks')。app.js は読み取りと報酬付与のみ。
+// FFX の save() が毎回 App.onTasksChanged() を呼ぶので、アプリ内完了・
+// LINE 取り込み・別タブ更新のすべてが同じ経路で検知される。
 const FF_KEY = 'ff-tasks';
-const FF_SYNC_URL = 'https://divine-wildflower-8952.piinatsu123.workers.dev/sync';
-// FocusFlow の緊急度 → いっしょぐらしの難易度
+// FocusFlow の緊急度 → 報酬難易度
 const FF_DIFFICULTY = { must: 'hard', want: 'normal', nice: 'easy' };
 const FF_URGENCY_LABELS = { must: '絶対', want: 'やりたい', nice: '余力' };
-
-function ffAvailable() {
-  return state.ff.enabled && localStorage.getItem(FF_KEY) !== null;
-}
 
 function ffLoadTasks() {
   try {
@@ -193,25 +158,12 @@ function ffLoadTasks() {
   }
 }
 
-function ffSaveTasks(tasks) {
-  try { localStorage.setItem(FF_KEY, JSON.stringify(tasks)); } catch (e) { /* 容量超過等は無視 */ }
-  // FocusFlow 本体の save() と同じく Worker にも同期 (LINE の「一覧」用・失敗は無視)
-  try {
-    fetch(FF_SYNC_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tasks })
-    }).catch(() => {});
-  } catch (e) { /* fetch 不可の環境では無視 */ }
-}
-
 function ffTaskTitle(t) {
-  return t.text || t.title || '';
+  return t.title || t.text || '';
 }
 
-/** 今日対象の FocusFlow タスク (「後日実行予定」は除く) */
+/** 今日対象のタスク (「後日実行予定」は除く) */
 function ffActiveTasks() {
-  if (!ffAvailable()) return [];
   return ffLoadTasks().filter(t => t && t.urgency !== 'scheduled');
 }
 
@@ -229,41 +181,28 @@ function ffRewardFor(task) {
   return { coins: eco.coins[diff] || 20, affection: eco.affection[diff] || 4 };
 }
 
-/** いっしょぐらし側から FocusFlow タスクを完了にする */
-function ffCompleteTask(id) {
-  const tasks = ffLoadTasks();
-  const task = tasks.find(t => t && t.id === id);
-  if (!task || task.done) return;
-  task.done = true;
-  (task.steps || []).forEach(s => { if (s && typeof s === 'object') s.done = true; });
-  ffSaveTasks(tasks);
+/** 完了されたタスクを検知して、まとめて報酬を出す (FFX の保存毎に呼ばれる) */
+let _knownTaskIds = null; // 新規追加検知用 (メモリのみ)
 
-  const reward = ffRewardFor(task);
-  addReward(reward.coins, reward.affection);
-  state.stats.totalCompleted++;
-  if (task.id) state.ff.rewardedIds.push(task.id);
-
-  const speech = getSpeech('task_complete', { task: ffTaskTitle(task) });
-  _lastBubbleText = speech;
-  showBubble(speech);
-  renderChara('home-chara', 'joy');
-  showToast(`⚡🪙+${reward.coins} ✨+${reward.affection}`);
-
-  if (isEverythingDoneToday()) handleAllDone(getEconomy());
-
-  saveState();
-  refreshHomeTaskList();
-  refreshTaskTab();
-  refreshStatusBar();
-}
-
-/** FocusFlow 側で完了されたタスクを検知して、まとめて報酬を出す */
 function ffCheckExternalCompletions() {
-  if (!ffAvailable()) return;
+  if (state == null) return; // 起動順による未初期化ガード
   ffEnsureInitialized();
   const tasks = ffLoadTasks();
   const rewarded = new Set(state.ff.rewardedIds);
   const newly = tasks.filter(t => t && t.done && t.id && !rewarded.has(t.id));
+
+  // 新規追加されたタスクには task_add のセリフで反応 (初回ロード時は記憶だけ)
+  if (_knownTaskIds === null) {
+    _knownTaskIds = new Set(tasks.map(t => t && t.id));
+  } else {
+    const added = tasks.filter(t => t && t.id && !t.done && !_knownTaskIds.has(t.id));
+    tasks.forEach(t => { if (t && t.id) _knownTaskIds.add(t.id); });
+    if (added.length > 0 && newly.length === 0) {
+      const speech = getSpeech('task_add', { task: ffTaskTitle(added[added.length - 1]) });
+      showBubble(speech);
+      renderChara('home-chara', 'smile');
+    }
+  }
 
   if (newly.length > 0) {
     let coins = 0;
@@ -296,19 +235,15 @@ function ffCheckExternalCompletions() {
   state.ff.rewardedIds = state.ff.rewardedIds.filter(id => existing.has(id));
   saveState();
 
-  if (newly.length > 0) {
-    refreshHomeTaskList();
-    refreshTaskTab();
-    refreshStatusBar();
-  }
+  refreshHomeTaskList();
+  refreshStatusBar();
 }
 
-/** 今日のタスク (ネイティブ + FocusFlow) が全部完了しているか */
+/** 今日のタスクが全部完了しているか */
 function isEverythingDoneToday() {
-  const native = getTodayTasks();
   const ff = ffActiveTasks();
-  if (native.length + ff.length === 0) return false;
-  return native.every(t => t.done) && ff.every(t => t.done);
+  if (ff.length === 0) return false;
+  return ff.every(t => t.done);
 }
 
 // ─── 時間帯 ───────────────────────────────────────────────────
@@ -394,15 +329,6 @@ function showLevelUpOverlay(lvEntry) {
   setTimeout(() => showBubble(text), 500);
 }
 
-// ─── コイン・親密度付与 ────────────────────────────────────────
-function addReward(coins, affection) {
-  const prevAff = state.affection;
-  state.coins    += coins;
-  state.affection += affection;
-  state.stats.totalCoinsEarned += coins;
-  checkLevelUp(prevAff);
-}
-
 // ─── 経済設定 ─────────────────────────────────────────────────
 function getEconomy() {
   return (typeof GameData !== 'undefined') ? GameData.ECONOMY : {
@@ -411,40 +337,6 @@ function getEconomy() {
     allDoneCoins: 30, allDoneAffection: 5,
     streakBonusPerDay: 5, streakBonusCap: 50
   };
-}
-
-// ─── タスク完了処理 ────────────────────────────────────────────
-function completeTask(taskId) {
-  const task = state.tasks.find(t => t.id === taskId);
-  if (!task || task.done) return;
-  task.done   = true;
-  task.doneAt = new Date().toISOString();
-
-  const eco = getEconomy();
-  const coins = eco.coins[task.difficulty] || 20;
-  const aff   = eco.affection[task.difficulty] || 4;
-
-  addReward(coins, aff);
-  state.stats.totalCompleted++;
-
-  // セリフ・表情
-  const speech = getSpeech('task_complete', { task: task.title });
-  _lastBubbleText = speech;
-  showBubble(speech);
-  renderChara('home-chara', 'joy');
-
-  // トースト
-  showToast(`🪙+${coins} ✨+${aff}`);
-
-  // 全タスク完了チェック (FocusFlow 連携分も含む)
-  if (isEverythingDoneToday()) {
-    handleAllDone(eco);
-  }
-
-  saveState();
-  refreshHomeTaskList();
-  refreshTaskTab();
-  refreshStatusBar();
 }
 
 function handleAllDone(eco) {
@@ -502,9 +394,9 @@ function renderHome(comeback) {
   if (comeback) {
     situation = 'comeback';
   } else {
-    // 未完了タスクが残っていて夕方以降 (FocusFlow 連携分も含む)
+    // 未完了タスクが残っていて夕方以降
     const slot = getTimeSlot();
-    const pending = getTodayTasks().concat(ffActiveTasks());
+    const pending = ffActiveTasks();
     const hasOverdue = (slot === 'evening' || slot === 'night')
       && pending.length > 0
       && pending.some(t => !t.done);
@@ -539,218 +431,23 @@ function refreshStatusBar() {
 function refreshHomeTaskList() {
   const container = document.getElementById('home-task-list');
   if (!container) return;
-  const tasks = getTodayTasks();
-  const ffTasks = ffActiveTasks().filter(t => !t.done);
-  if (tasks.length === 0 && ffTasks.length === 0) {
-    container.innerHTML = '<p style="font-size:12px;color:var(--text-muted);padding:4px 0">タスクがありません。追加してみましょう！</p>';
+  const tasks = ffActiveTasks().filter(t => !t.done);
+  if (tasks.length === 0) {
+    container.innerHTML = '<p style="font-size:12px;color:var(--text-muted);padding:4px 0">今日のタスクは全部終わりました！タスクタブから追加できます。</p>';
     return;
   }
-  let html = tasks.map(t => {
-    const diffLabel = { easy: 'かんたん', normal: 'ふつう', hard: 'むずかしい' }[t.difficulty] || '';
-    return `<div class="home-task-item">
-      <button class="home-task-check${t.done ? ' done' : ''}" data-id="${esc(t.id)}" aria-label="完了">
-        ${t.done ? '✓' : ''}
-      </button>
-      <span class="home-task-label${t.done ? ' done' : ''}">${esc(t.title)}</span>
-      <span class="task-diff diff-${esc(t.difficulty)}">${esc(diffLabel)}</span>
-    </div>`;
-  }).join('');
-
-  if (ffTasks.length > 0) {
-    html += '<div class="ff-group-label">⚡ FocusFlow</div>';
-    html += ffTasks.map(t => `<div class="home-task-item">
-      <button class="home-task-check" data-ff-id="${esc(t.id)}" aria-label="完了"></button>
-      <span class="home-task-label">${esc(ffTaskTitle(t))}</span>
-      <span class="task-diff ff-${esc(t.urgency)}">${esc(FF_URGENCY_LABELS[t.urgency] || '')}</span>
-    </div>`).join('');
-  }
-  container.innerHTML = html;
+  container.innerHTML = tasks.map(t => `<div class="home-task-item">
+    <button class="home-task-check" data-id="${esc(t.id)}" aria-label="完了"></button>
+    <span class="home-task-label">${esc(ffTaskTitle(t))}</span>
+    <span class="task-diff ff-${esc(t.urgency)}">${esc(FF_URGENCY_LABELS[t.urgency] || '')}</span>
+  </div>`).join('');
 
   container.querySelectorAll('.home-task-check').forEach(btn => {
     btn.addEventListener('click', () => {
-      if (btn.dataset.ffId) ffCompleteTask(btn.dataset.ffId);
-      else completeTask(btn.dataset.id);
+      // FFX 経由で完了 → save() → onTasksChanged で報酬付与
+      if (window.FFX) FFX.toggleDone(btn.dataset.id);
     });
   });
-}
-
-// ─── タスクタブ ───────────────────────────────────────────────
-let editingTaskId = null;
-let taskFormDifficulty = 'normal';
-let taskFormRepeat = 'none';
-let taskFormWeekdays = [];
-
-function refreshTaskTab() {
-  const container = document.getElementById('task-list');
-  if (!container) return;
-  const tasks = getTodayTasks();
-  const ffTasks = ffActiveTasks().filter(t => !t.done);
-  if (tasks.length === 0 && ffTasks.length === 0) {
-    container.innerHTML = '<div class="empty-tasks">タスクがありません<br>「+ 追加」から作ってみましょう！</div>';
-    return;
-  }
-  let html = tasks.map(t => {
-    const repeatLabel = t.repeat === null ? '' :
-      t.repeat === 'daily' ? '毎日' :
-      Array.isArray(t.repeat) ? t.repeat.map(d => {
-        const m = { mon:'月',tue:'火',wed:'水',thu:'木',fri:'金',sat:'土',sun:'日' };
-        return m[d] || d;
-      }).join('') : '';
-
-    return `<div class="task-card${t.done ? ' is-done' : ''}" data-id="${esc(t.id)}">
-      <button class="task-check-btn${t.done ? ' done' : ''}" data-id="${esc(t.id)}" aria-label="完了にする">
-        ${t.done ? '✓' : ''}
-      </button>
-      <div class="task-body">
-        <div class="task-title${t.done ? ' done' : ''}">${esc(t.title)}</div>
-        <div class="task-meta">
-          <span class="task-diff diff-${esc(t.difficulty)}">${esc({ easy:'かんたん', normal:'ふつう', hard:'むずかしい' }[t.difficulty] || '')}</span>
-          ${repeatLabel ? `<span class="task-repeat">🔁${esc(repeatLabel)}</span>` : ''}
-        </div>
-      </div>
-      <div class="task-actions">
-        <button class="task-action-btn edit-btn" data-id="${esc(t.id)}" aria-label="編集">✏️</button>
-        <button class="task-action-btn del del-btn" data-id="${esc(t.id)}" aria-label="削除">🗑️</button>
-      </div>
-    </div>`;
-  }).join('');
-
-  if (ffTasks.length > 0) {
-    html += '<div class="ff-section-header">⚡ FocusFlow のタスク<span class="ff-section-note">編集は FocusFlow で</span></div>';
-    html += ffTasks.map(t => {
-      const min = t.estimate || 0;
-      const estLabel = min > 0 ? (min >= 60 ? (min / 60).toFixed(1) + 'h' : min + '分') : '';
-      return `<div class="task-card ff-card">
-        <button class="task-check-btn" data-ff-id="${esc(t.id)}" aria-label="完了にする"></button>
-        <div class="task-body">
-          <div class="task-title">${esc(ffTaskTitle(t))}</div>
-          <div class="task-meta">
-            <span class="task-diff ff-${esc(t.urgency)}">${esc(FF_URGENCY_LABELS[t.urgency] || '')}</span>
-            ${estLabel ? `<span class="task-repeat">⏱${esc(estLabel)}</span>` : ''}
-          </div>
-        </div>
-      </div>`;
-    }).join('');
-  }
-  container.innerHTML = html;
-
-  container.querySelectorAll('.task-check-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (btn.dataset.ffId) ffCompleteTask(btn.dataset.ffId);
-      else completeTask(btn.dataset.id);
-    });
-  });
-  container.querySelectorAll('.edit-btn').forEach(btn => {
-    btn.addEventListener('click', () => openTaskModal(btn.dataset.id));
-  });
-  container.querySelectorAll('.del-btn').forEach(btn => {
-    btn.addEventListener('click', () => deleteTask(btn.dataset.id));
-  });
-}
-
-function openTaskModal(id) {
-  editingTaskId = id || null;
-  const modal = document.getElementById('task-modal');
-  const titleEl = document.getElementById('task-modal-title');
-  const inputEl = document.getElementById('task-form-title');
-  if (!modal || !titleEl || !inputEl) return;
-
-  if (id) {
-    const task = state.tasks.find(t => t.id === id);
-    if (!task) return;
-    titleEl.textContent = 'タスクを編集';
-    inputEl.value = task.title;
-    taskFormDifficulty = task.difficulty;
-    taskFormRepeat = task.repeat === null ? 'none' : task.repeat === 'daily' ? 'daily' : 'weekday';
-    taskFormWeekdays = Array.isArray(task.repeat) ? [...task.repeat] : [];
-  } else {
-    titleEl.textContent = 'タスクを追加';
-    inputEl.value = '';
-    taskFormDifficulty = 'normal';
-    taskFormRepeat = 'none';
-    taskFormWeekdays = [];
-  }
-
-  syncTaskFormUI();
-  modal.classList.remove('hidden');
-  setTimeout(() => inputEl.focus(), 100);
-}
-
-function syncTaskFormUI() {
-  // 難易度
-  document.querySelectorAll('#task-difficulty-select .chip').forEach(c => {
-    c.classList.toggle('active', c.dataset.value === taskFormDifficulty);
-  });
-  // 繰り返し
-  document.querySelectorAll('#task-repeat-select .chip').forEach(c => {
-    c.classList.toggle('active', c.dataset.value === taskFormRepeat);
-  });
-  // 曜日ピッカー
-  const picker = document.getElementById('task-weekday-picker');
-  if (picker) {
-    picker.classList.toggle('hidden', taskFormRepeat !== 'weekday');
-    picker.querySelectorAll('.day-btn').forEach(b => {
-      b.classList.toggle('active', taskFormWeekdays.includes(b.dataset.day));
-    });
-  }
-}
-
-function closeTaskModal() {
-  const modal = document.getElementById('task-modal');
-  if (modal) modal.classList.add('hidden');
-  editingTaskId = null;
-}
-
-function saveTask() {
-  const inputEl = document.getElementById('task-form-title');
-  if (!inputEl) return;
-  const title = inputEl.value.trim();
-  if (!title) {
-    inputEl.focus();
-    return;
-  }
-
-  let repeat;
-  if (taskFormRepeat === 'none') repeat = null;
-  else if (taskFormRepeat === 'daily') repeat = 'daily';
-  else repeat = taskFormWeekdays.length > 0 ? [...taskFormWeekdays] : null;
-
-  if (editingTaskId) {
-    const task = state.tasks.find(t => t.id === editingTaskId);
-    if (task) {
-      task.title = title;
-      task.difficulty = taskFormDifficulty;
-      task.repeat = repeat;
-    }
-  } else {
-    const newTask = {
-      id: uid(),
-      title,
-      difficulty: taskFormDifficulty,
-      repeat,
-      done: false,
-      doneAt: null,
-      createdAt: new Date().toISOString()
-    };
-    state.tasks.push(newTask);
-
-    // task_add セリフ
-    const speech = getSpeech('task_add', { task: title });
-    showBubble(speech);
-    renderChara('home-chara', 'smile');
-  }
-
-  saveState();
-  closeTaskModal();
-  refreshTaskTab();
-  refreshHomeTaskList();
-}
-
-function deleteTask(id) {
-  state.tasks = state.tasks.filter(t => t.id !== id);
-  saveState();
-  refreshTaskTab();
-  refreshHomeTaskList();
 }
 
 // ─── プレゼントショップ ─────────────────────────────────────────
@@ -1052,30 +749,6 @@ function initSettingsTab() {
     state.character.personality = v;
   });
 
-  // FocusFlow 連携
-  const ffToggle = document.getElementById('ff-enabled-toggle');
-  const ffStatus = document.getElementById('ff-status');
-  if (ffToggle) {
-    ffToggle.checked = state.ff.enabled;
-    // initSettingsTab は再実行されるので addEventListener ではなく onchange で上書き
-    ffToggle.onchange = () => {
-      state.ff.enabled = ffToggle.checked;
-      saveState();
-      if (state.ff.enabled) ffCheckExternalCompletions();
-      refreshHomeTaskList();
-      initSettingsTab();
-    };
-  }
-  if (ffStatus) {
-    if (localStorage.getItem(FF_KEY) === null) {
-      ffStatus.textContent = 'FocusFlow のデータが見つかりません。同じドメインで FocusFlow を開くと連携できます。';
-    } else if (!state.ff.enabled) {
-      ffStatus.textContent = '連携はオフになっています。';
-    } else {
-      const n = ffActiveTasks().filter(t => !t.done).length;
-      ffStatus.textContent = `連携中 — 未完了タスク ${n} 件`;
-    }
-  }
 }
 
 function renderSettingsPreview() {
@@ -1304,7 +977,7 @@ function switchTab(tabName) {
     refreshStatusBar();
     refreshHomeTaskList();
   } else if (tabName === 'tasks') {
-    refreshTaskTab();
+    if (window.FFX) FFX.renderMain();
   } else if (tabName === 'shop') {
     renderShop();
   } else if (tabName === 'date') {
@@ -1337,56 +1010,6 @@ function bindEvents() {
   // ホーム：「すべて見る」ボタン
   const homeGotoTasks = document.getElementById('home-goto-tasks');
   if (homeGotoTasks) homeGotoTasks.addEventListener('click', () => switchTab('tasks'));
-
-  // タスク追加ボタン
-  const taskAddBtn = document.getElementById('task-add-btn');
-  if (taskAddBtn) taskAddBtn.addEventListener('click', () => openTaskModal(null));
-
-  // タスクモーダル: 閉じる
-  const taskModalClose = document.getElementById('task-modal-close');
-  if (taskModalClose) taskModalClose.addEventListener('click', closeTaskModal);
-
-  const taskFormCancel = document.getElementById('task-form-cancel');
-  if (taskFormCancel) taskFormCancel.addEventListener('click', closeTaskModal);
-
-  // タスクモーダル: 保存
-  const taskFormSave = document.getElementById('task-form-save');
-  if (taskFormSave) taskFormSave.addEventListener('click', saveTask);
-
-  // タスクモーダル: Enter で保存
-  const taskFormTitle = document.getElementById('task-form-title');
-  if (taskFormTitle) {
-    taskFormTitle.addEventListener('keydown', e => {
-      if (e.key === 'Enter') saveTask();
-    });
-  }
-
-  // タスクモーダル: 難易度チップ
-  document.querySelectorAll('#task-difficulty-select .chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      taskFormDifficulty = chip.dataset.value;
-      syncTaskFormUI();
-    });
-  });
-
-  // タスクモーダル: 繰り返しチップ
-  document.querySelectorAll('#task-repeat-select .chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      taskFormRepeat = chip.dataset.value;
-      syncTaskFormUI();
-    });
-  });
-
-  // タスクモーダル: 曜日ボタン
-  document.querySelectorAll('#task-weekday-picker .day-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const d = btn.dataset.day;
-      const idx = taskFormWeekdays.indexOf(d);
-      if (idx >= 0) taskFormWeekdays.splice(idx, 1);
-      else taskFormWeekdays.push(d);
-      syncTaskFormUI();
-    });
-  });
 
   // デート VN: クリックで進む
   const vnUI = document.getElementById('vn-ui');
@@ -1443,23 +1066,13 @@ function bindEvents() {
     }
   });
 
-  // 別タブの FocusFlow がタスクを更新したらリアルタイムに反映
+  // 別タブ (旧 FocusFlow 等) がタスクを更新したら報酬判定だけ行う
   window.addEventListener('storage', e => {
     if (e.key === FF_KEY && isSetupDone()) {
       ffCheckExternalCompletions();
-      refreshHomeTaskList();
-      if (currentTab === 'tasks') refreshTaskTab();
-      if (currentTab === 'settings') initSettingsTab();
     }
   });
 
-  // モーダルオーバーレイ: 外側クリックで閉じる
-  const taskModal = document.getElementById('task-modal');
-  if (taskModal) {
-    taskModal.addEventListener('click', e => {
-      if (e.target === taskModal) closeTaskModal();
-    });
-  }
 }
 
 function bindSetupNavEvents() {
@@ -1515,11 +1128,33 @@ function init() {
 
     renderHome(wasAway);
 
-    // FocusFlow 側での完了を検知して報酬付与 (comeback の挨拶を消さないよう少し遅らせる)
+    // 旧バージョンのネイティブタスクを FocusFlow システムへ一度だけ移行
+    migrateNativeTasks();
+
+    // 別の場所 (旧 FocusFlow・別タブ) での完了を検知して報酬付与
+    // (comeback の挨拶を消さないよう少し遅らせる)
     setTimeout(ffCheckExternalCompletions, wasAway ? 2500 : 800);
   }
 
   bindEvents();
+}
+
+// 旧いっしょぐらしのネイティブタスク → ff-tasks への一回限りの移行
+function migrateNativeTasks() {
+  if (state.ff.migrated || !Array.isArray(state.tasks) || state.tasks.length === 0) {
+    state.ff.migrated = true;
+    return;
+  }
+  const map = { hard: 'must', normal: 'want', easy: 'nice' };
+  if (window.FFX) {
+    state.tasks.filter(t => !t.done).forEach(t => {
+      FFX.addTask({ title: t.title, urgency: map[t.difficulty] || 'want', estimate: 30, steps: [], done: false });
+    });
+    FFX.renderMain();
+  }
+  state.tasks = [];
+  state.ff.migrated = true;
+  saveState();
 }
 
 // DOM 準備完了後に起動
@@ -1530,4 +1165,8 @@ if (document.readyState === 'loading') {
 }
 
 // グローバル公開 (任意)
-window.App = { state, saveState, switchTab };
+window.App = {
+  state, saveState, switchTab,
+  // FFX (focusflow.js) の save() から毎回呼ばれる
+  onTasksChanged: function () { ffCheckExternalCompletions(); }
+};
