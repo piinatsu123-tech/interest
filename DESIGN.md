@@ -49,6 +49,8 @@
   streak: { current: 0, best: 0, lastAllDoneDate: null },  // 'YYYY-MM-DD'
   tasks: [],                                 // 旧形式 (移行後は常に空。タスクは ff-tasks へ)
   roster: [{ id, character, affection, memories }],  // 控えのキャラクター (複数キャラ)
+  timeSlots: [{ id, start, name, base }],    // 時間帯 (base: morning|day|evening|night)
+  customDates: [{ id, name, icon, price, minLevel, affection, bgClass, script }],
   ff: { enabled, initialized, migrated, rewardedIds: [] },  // FocusFlow 統合の管理
   memories: [{ date, type: 'gift'|'date'|'levelup', label }],  // 新しい順
   stats: { totalCompleted: 0, totalCoinsEarned: 0, totalGifts: 0, totalDates: 0 },
@@ -217,8 +219,11 @@ SPA。`<section>` 切り替え方式。ナビは下部タブバー。
 
 - **入口**: せってい「性格と話し方」→「📝 セリフを編集」。全画面エディタ
   (一覧→場面詳細の 2 階層、`#dialogue-editor`)
-- **編集対象 18 場面**: 12 situation + `gift_reaction`({gift})+
-  `praise` 5 種。一覧に「標準 / カスタム n本」の状態表示
+- **編集対象**: 12 situation + `gift_reaction`({gift})+ `praise` 5 種+
+  **プレゼント別 10 種**(`gift:<id>` → `customDialogue.gifts[id]`。
+  解決順: プレゼント専用 > 汎用 gift_reaction > プリセット)+
+  **時間帯の専用挨拶**(`slot:<id>` → `customDialogue['slot:<id>']`)。
+  一覧は `getDialogueEditMeta()` で動的生成、「標準 / カスタム n本」の状態表示
 - **保存先**: アクティブキャラの `customDialogue[situation]`(平坦配列)。
   **エンジンはカスタムを性格に関係なくオーバーレイ**するので、プリセット性格の
   子にも場面単位で部分上書きできる(書いてない場面は標準のまま)。
@@ -255,6 +260,23 @@ SPA。`<section>` 切り替え方式。ナビは下部タブバー。
   (`artFragmentHTML()` が値の形式で出し分け)。きほんスロットのタップは
   base の差し替え(SVG 立ち絵を画像に置換も可)。✕ で表情単位の削除
 - `saveState()` が容量超過時にトースト警告(画像の入れすぎ検知)
+
+## 時間帯のカスタマイズ
+
+挨拶が切り替わる時刻と時間帯の数を変えられる。
+
+- **データ**: `state.timeSlots = [{id, start(0-23), name(8文字), base}]`(共有・最大 8・最小 1)。
+  base は朝/昼/夕/夜のトーンで、**部屋の背景・表情(夜=sleepy)・督促判定(夕/夜)**と
+  専用セリフが無いときの挨拶フォールバック(`greeting_<base>`)を決める
+- `currentTimeSlot()`: start <= 現在時 の最後のスロット(どれにも当たらなければ
+  最後のスロット=日付をまたぐ夜枠)。`getTimeSlot()` は互換 API として base を返す
+- **時間帯専用の挨拶**: セリフエディタの `slot:<id>` 行に書くと
+  `getGreetingSituation()` がそれを優先(キャラごと)。セリフインポートも
+  `"slot:<id>"` キーを受け付け、相談プロンプトに現在のスロット一覧を自動掲載
+- **せってい「時間帯と挨拶」**: 開始時刻セレクト・名前・base チップ・削除(最後の
+  1 つは不可)・追加・標準に戻す。変更は即保存
+- ホームタブへ戻ったとき背景は常に最新化し、**スロットが変わっていたら挨拶し直す**
+  (`_lastGreetSlotId`)。プレゼント直後などの吹き出しは上書きしない
 
 ## 部分インポート(セリフ集 / デート台本)
 
