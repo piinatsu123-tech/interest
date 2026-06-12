@@ -361,6 +361,7 @@
             <input type="text" id="s2-suffix" class="input-short" maxlength="4">
           </div>
         </div>
+        <button class="btn-secondary de-entry-btn" id="dialogue-editor-btn">📝 セリフを編集</button>
       </div>
 
       <div class="settings-section">
@@ -455,6 +456,31 @@
     <div class="levelup-name" id="levelup-name"></div>
     <div id="levelup-chara" class="levelup-chara"></div>
     <button class="btn-primary" id="levelup-ok">やったー！</button>
+  </div>
+</div>
+
+<!-- ===================== セリフエディタ ===================== -->
+<div id="dialogue-editor" class="de-overlay hidden">
+  <div class="de-header">
+    <button class="de-back-btn" id="de-back">‹</button>
+    <div class="de-title" id="de-title">セリフを編集</div>
+  </div>
+  <div class="de-body" id="de-list"></div>
+  <div class="de-body hidden" id="de-detail">
+    <p class="de-hint" id="de-hint"></p>
+    <div id="de-lines" class="de-lines"></div>
+    <div class="de-btn-row">
+      <button class="btn-secondary" id="de-add">＋ セリフを追加</button>
+      <button class="btn-secondary" id="de-copy">📋 標準からコピー</button>
+    </div>
+    <div class="de-preview-box">
+      <button class="btn-secondary" id="de-try">🎤 ためす</button>
+      <p id="de-preview" class="de-preview"></p>
+    </div>
+    <div class="de-actions">
+      <button class="btn-secondary" id="de-reset">標準に戻す</button>
+      <button class="btn-primary" id="de-save">保存</button>
+    </div>
   </div>
 </div>
 

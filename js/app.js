@@ -757,7 +757,7 @@ function buyGift(giftId) {
   // リアクション
   const custom = state.character.customDialogue;
   let reactions;
-  if (state.character.personality === 'custom' && custom && Array.isArray(custom.gift_reaction) && custom.gift_reaction.length) {
+  if (custom && Array.isArray(custom.gift_reaction) && custom.gift_reaction.length) {
     reactions = custom.gift_reaction;
   } else {
     reactions = (gift.reactions && gift.reactions[effectivePersonality()]) || ['ありがとう…'];
@@ -1540,6 +1540,221 @@ function buildPersonalityGrid(containerId, activeValue, onSelect, customLabel) {
   });
 }
 
+// ─── セリフエディタ (アプリ内でカスタムセリフを編集) ──────────────
+// 書いた場面だけ customDialogue に保存され、Dialogue エンジンが標準セリフより
+// 優先して使う (プリセット性格への部分上書きにも、フルカスタムの修正にも対応)。
+const DIALOGUE_EDIT_META = [
+  { id: 'setup_first',      label: 'はじめましての挨拶' },
+  { id: 'greeting_morning', label: 'あさの挨拶 (5〜10時)' },
+  { id: 'greeting_day',     label: 'ひるの挨拶 (10〜17時)' },
+  { id: 'greeting_evening', label: 'ゆうがたの挨拶 (17〜22時)' },
+  { id: 'greeting_night',   label: 'よるの挨拶 (22〜5時)' },
+  { id: 'idle',             label: '立ち絵をタップしたとき' },
+  { id: 'task_add',         label: 'タスクを追加したとき', ph: '{task}' },
+  { id: 'task_complete',    label: 'タスクを完了したとき', ph: '{task}' },
+  { id: 'all_done',         label: '今日ぜんぶ完了したとき' },
+  { id: 'has_overdue',      label: '夕方にタスクが残っているとき' },
+  { id: 'comeback',         label: 'ひさしぶりに会えたとき' },
+  { id: 'levelup',          label: '親密度が上がったとき' },
+  { id: 'gift_reaction',    label: 'プレゼントをもらったとき', ph: '{gift}' },
+  { id: 'praise:int',       label: '知性📚を褒めるとき' },
+  { id: 'praise:fit',       label: '体力💪を褒めるとき' },
+  { id: 'praise:life',      label: '生活力🏠を褒めるとき' },
+  { id: 'praise:sense',     label: '感性🎨を褒めるとき' },
+  { id: 'praise:grit',      label: '根性🔥を褒めるとき' }
+];
+
+let deCurrentSit = null;
+
+/** その場面のカスタムセリフを平坦な配列で返す (なければ null) */
+function deGetPool(sitId) {
+  const cd = state.character.customDialogue;
+  if (!cd) return null;
+  let entry;
+  if (sitId.startsWith('praise:')) entry = cd.praise && cd.praise[sitId.slice(7)];
+  else entry = cd[sitId];
+  if (!entry) return null;
+  if (Array.isArray(entry)) return entry.slice();
+  // tier 別 {low,mid,high} は編集用に平坦化
+  return ['low', 'mid', 'high'].reduce((acc, t) =>
+    acc.concat(Array.isArray(entry[t]) ? entry[t] : []), []);
+}
+
+/** カスタムセリフを保存 (null/空で標準に戻す) */
+function deSetPool(sitId, lines) {
+  if (!state.character.customDialogue) state.character.customDialogue = {};
+  const cd = state.character.customDialogue;
+  const value = (lines && lines.length) ? lines : null;
+  if (sitId.startsWith('praise:')) {
+    const pid = sitId.slice(7);
+    if (value) {
+      cd.praise = cd.praise || {};
+      cd.praise[pid] = value;
+    } else if (cd.praise) {
+      delete cd.praise[pid];
+      if (!Object.keys(cd.praise).length) delete cd.praise;
+    }
+  } else if (value) {
+    cd[sitId] = value;
+  } else {
+    delete cd[sitId];
+  }
+  if (!Object.keys(cd).length) state.character.customDialogue = null;
+  saveState();
+}
+
+/** 標準 (ベース性格) のセリフ。コピー元・プレビュー用 */
+function dePresetLines(sitId) {
+  if (typeof Dialogue === 'undefined') return [];
+  const p = Dialogue.resolvePersonality(state);
+  if (sitId.startsWith('praise:')) {
+    const d = Dialogue.PARAM_PRAISE[p] || {};
+    return (d[sitId.slice(7)] || []).slice();
+  }
+  if (sitId === 'gift_reaction') return []; // 標準はプレゼントごとに別なのでコピー元なし
+  const sd = (Dialogue.DIALOGUE[p] || {})[sitId];
+  if (!sd) return [];
+  return ['low', 'mid', 'high'].reduce((acc, t) => acc.concat(sd[t] || []), []);
+}
+
+function openDialogueEditor() {
+  deRenderList();
+  document.getElementById('de-list').classList.remove('hidden');
+  document.getElementById('de-detail').classList.add('hidden');
+  document.getElementById('de-title').textContent = `${state.character.name}のセリフ`;
+  document.getElementById('dialogue-editor').classList.remove('hidden');
+}
+
+function closeDialogueEditor() {
+  document.getElementById('dialogue-editor').classList.add('hidden');
+  deCurrentSit = null;
+}
+
+function deRenderList() {
+  const el = document.getElementById('de-list');
+  el.innerHTML = DIALOGUE_EDIT_META.map(m => {
+    const pool = deGetPool(m.id);
+    const status = pool ? `カスタム ${pool.length}本` : '標準';
+    return `<button class="de-row${pool ? ' customized' : ''}" data-sit="${esc(m.id)}">
+      <span class="de-row-label">${esc(m.label)}</span>
+      <span class="de-row-status">${esc(status)} ›</span>
+    </button>`;
+  }).join('');
+  el.querySelectorAll('.de-row').forEach(btn => {
+    btn.addEventListener('click', () => deOpenSit(btn.dataset.sit));
+  });
+}
+
+function deOpenSit(sitId) {
+  deCurrentSit = sitId;
+  const meta = DIALOGUE_EDIT_META.find(m => m.id === sitId);
+  document.getElementById('de-title').textContent = meta.label;
+  const hints = ['{user} = 呼び名', '{me} = 一人称'];
+  if (meta.ph) hints.push(`${meta.ph} = ${meta.ph === '{task}' ? 'タスク名' : 'プレゼント名'}`);
+  document.getElementById('de-hint').textContent =
+    '1 枠 = 1 セリフ (最大 10 本)。空にして保存すると標準セリフに戻ります。使えるタグ: ' + hints.join(' / ');
+  deRenderLines(deGetPool(sitId) || []);
+  document.getElementById('de-preview').textContent = '';
+  document.getElementById('de-list').classList.add('hidden');
+  document.getElementById('de-detail').classList.remove('hidden');
+}
+
+function deRenderLines(lines) {
+  const el = document.getElementById('de-lines');
+  if (!lines.length) {
+    el.innerHTML = '<p class="de-empty">まだカスタムセリフがありません。「＋」で書くか「標準からコピー」で下敷きを入れられます。</p>';
+    return;
+  }
+  el.innerHTML = lines.map(() =>
+    `<div class="de-line-row">
+      <textarea class="de-line" rows="2" maxlength="200"></textarea>
+      <button class="de-line-del" aria-label="削除">🗑️</button>
+    </div>`).join('');
+  // 値は textarea の value で安全に注入
+  el.querySelectorAll('.de-line').forEach((ta, i) => { ta.value = lines[i]; });
+  el.querySelectorAll('.de-line-del').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.closest('.de-line-row').remove();
+      if (!document.querySelector('#de-lines .de-line-row')) deRenderLines([]);
+    });
+  });
+}
+
+function deCollectLines() {
+  return [...document.querySelectorAll('#de-lines .de-line')]
+    .map(ta => ta.value.trim().slice(0, 200))
+    .filter(Boolean)
+    .slice(0, 10);
+}
+
+function deAddLine() {
+  const lines = deCollectLines();
+  if (lines.length >= 10) {
+    showToast('セリフは 10 本までです');
+    return;
+  }
+  lines.push('');
+  // 空行は collect で消えるので直接描画
+  const el = document.getElementById('de-lines');
+  if (el.querySelector('.de-empty')) el.innerHTML = '';
+  const row = document.createElement('div');
+  row.className = 'de-line-row';
+  row.innerHTML = `<textarea class="de-line" rows="2" maxlength="200"></textarea>
+    <button class="de-line-del" aria-label="削除">🗑️</button>`;
+  row.querySelector('.de-line-del').addEventListener('click', () => {
+    row.remove();
+    if (!document.querySelector('#de-lines .de-line-row')) deRenderLines([]);
+  });
+  el.appendChild(row);
+  row.querySelector('.de-line').focus();
+}
+
+function deCopyPreset() {
+  const preset = dePresetLines(deCurrentSit);
+  if (!preset.length) {
+    showToast('この場面には標準セリフがありません');
+    return;
+  }
+  const current = deCollectLines();
+  const merged = [...current];
+  preset.forEach(l => {
+    if (merged.length < 10 && !merged.includes(l)) merged.push(l);
+  });
+  deRenderLines(merged);
+}
+
+function deTry() {
+  const lines = deCollectLines();
+  const pool = lines.length ? lines : dePresetLines(deCurrentSit);
+  if (!pool.length) return;
+  let line = pool[Math.floor(Math.random() * pool.length)];
+  line = line.replace(/\{task\}/g, 'さんぽ').replace(/\{gift\}/g, '花束');
+  const formatted = (typeof Dialogue !== 'undefined') ? Dialogue.format(line, state) : line;
+  document.getElementById('de-preview').textContent = `「${formatted}」`;
+}
+
+function deSave() {
+  const lines = deCollectLines();
+  deSetPool(deCurrentSit, lines);
+  showToast(lines.length ? `💾 ${lines.length}本のセリフを保存しました` : '標準セリフに戻しました');
+  deBackToList();
+}
+
+function deResetSit() {
+  deSetPool(deCurrentSit, null);
+  showToast('標準セリフに戻しました');
+  deBackToList();
+}
+
+function deBackToList() {
+  deCurrentSit = null;
+  const meta = document.getElementById('de-title');
+  meta.textContent = `${state.character.name}のセリフ`;
+  deRenderList();
+  document.getElementById('de-detail').classList.add('hidden');
+  document.getElementById('de-list').classList.remove('hidden');
+}
+
 // ─── キャラクターインポート (チャットで相談 → JSON 取り込み) ──────
 // AI チャットに相談用プロンプトを貼ってキャラを作り、出力された JSON を
 // インポートする。FocusFlow のクリップボードインポートと同じ思想。
@@ -2066,6 +2281,18 @@ function bindEvents() {
   // 複数キャラ: 追加・ウィザード中止
   bind('roster-add-btn',    startAddCharacter);
   bind('wizard-cancel-btn', cancelAddCharacter);
+
+  // セリフエディタ
+  bind('dialogue-editor-btn', openDialogueEditor);
+  bind('de-back', () => {
+    if (deCurrentSit !== null) deBackToList();
+    else closeDialogueEditor();
+  });
+  bind('de-add',   deAddLine);
+  bind('de-copy',  deCopyPreset);
+  bind('de-try',   deTry);
+  bind('de-save',  deSave);
+  bind('de-reset', deResetSit);
   // モーダル外クリックで閉じる
   ['char-prompt-modal', 'char-import-modal'].forEach(id => {
     const overlay = document.getElementById(id);

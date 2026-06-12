@@ -1157,11 +1157,10 @@
       ? window.GameData.tierFor(state ? state.affection : 0)
       : 'low';
 
-    // カスタムセリフ集 (インポートされたフルカスタム性格) を最優先
+    // カスタムセリフ集を最優先 (フルカスタム性格でも、プリセットへの
+    // 部分上書き (アプリ内セリフ編集) でも、書いてある場面はカスタムを使う)
     var custom = state && state.character && state.character.customDialogue;
-    var pool = (state && state.character && state.character.personality === 'custom' && custom)
-      ? customPool(custom[situation], tier)
-      : null;
+    var pool = custom ? customPool(custom[situation], tier) : null;
 
     if (!pool) {
       var pdata = DIALOGUE[resolvePersonality(state)];
@@ -1260,8 +1259,7 @@
   function praise(paramId, state) {
     var pool = null;
     var custom = state && state.character && state.character.customDialogue;
-    if (state && state.character && state.character.personality === 'custom'
-        && custom && custom.praise) {
+    if (custom && custom.praise) {
       pool = customPool(custom.praise[paramId], 'low');
     }
     if (!pool) {
@@ -1279,6 +1277,7 @@
     format: format,
     praise: praise,
     resolvePersonality: resolvePersonality,
-    DIALOGUE: DIALOGUE
+    DIALOGUE: DIALOGUE,
+    PARAM_PRAISE: PARAM_PRAISE
   };
 })();
