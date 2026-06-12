@@ -82,6 +82,8 @@ const DEFAULT_STATE = {
     totalGifts: 0,
     totalDates: 0
   },
+  // 控えのキャラクター (アクティブは character/affection/memories に展開)
+  roster: [],
   // FocusFlow 連携 (同一オリジンの localStorage 'ff-tasks' を共有)
   ff: { enabled: true, initialized: false, rewardedIds: [] },
   lastVisit: null
@@ -109,6 +111,7 @@ function loadState() {
       if (!Array.isArray(state.ff.rewardedIds)) state.ff.rewardedIds = [];
       if (!Array.isArray(state.tasks)) state.tasks = [];
       if (!Array.isArray(state.memories)) state.memories = [];
+      if (!Array.isArray(state.roster)) state.roster = [];
     } else {
       state = JSON.parse(JSON.stringify(DEFAULT_STATE));
     }
@@ -919,8 +922,136 @@ function renderRecords() {
   }
 }
 
+// ─── キャラクターロスター (複数キャラの保存・交代) ──────────────
+// アクティブキャラは state.character / affection / memories に展開し、
+// 控えは state.roster に {id, character, affection, memories} で保存する。
+const ROSTER_MAX = 6; // アクティブ含む上限 (customArt の容量を考慮)
+
+/** いまのアクティブキャラのスナップショット */
+function snapshotActiveChar() {
+  return {
+    id: state.character.rosterId || uid(),
+    character: JSON.parse(JSON.stringify(state.character)),
+    affection: state.affection,
+    memories: state.memories
+  };
+}
+
+/** ロスターエントリをアクティブに展開 */
+function activateCharEntry(entry) {
+  state.character = JSON.parse(JSON.stringify(entry.character));
+  state.character.rosterId = entry.id;
+  state.affection = entry.affection || 0;
+  state.memories = Array.isArray(entry.memories) ? entry.memories : [];
+}
+
+/** キャラのサムネイル HTML (立ち絵を小さく描画) */
+function charThumbHTML(character) {
+  const art = character.customArt;
+  if (art && art.dataUrl) return `<img class="custom-art-img" src="${art.dataUrl}" alt="">`;
+  if (art && art.base) return art.base;
+  if (typeof CharacterArt !== 'undefined') return CharacterArt.render(character.look, 'smile');
+  return '🧑';
+}
+
+/** せっていのキャラ一覧を描画 */
+function renderRosterList() {
+  const container = document.getElementById('roster-list');
+  if (!container) return;
+  const entries = [snapshotActiveChar(), ...state.roster];
+  container.innerHTML = entries.map((e, i) => {
+    const lv = (typeof GameData !== 'undefined') ? GameData.levelFor(e.affection || 0) : { name: '' };
+    const active = i === 0;
+    return `<div class="roster-row${active ? ' active' : ''}" data-id="${esc(e.id)}">
+      <div class="roster-thumb">${charThumbHTML(e.character)}</div>
+      <div class="roster-info">
+        <div class="roster-name">${esc(e.character.name)}${active ? '<span class="roster-badge">いっしょ</span>' : ''}</div>
+        <div class="roster-meta">💛${esc(lv.name)} · 親密度${e.affection || 0}</div>
+      </div>
+      ${active ? '' : `<button class="roster-switch-btn" data-id="${esc(e.id)}">交代</button>
+      <button class="roster-del-btn" data-id="${esc(e.id)}" aria-label="お別れ">🗑️</button>`}
+    </div>`;
+  }).join('');
+
+  container.querySelectorAll('.roster-switch-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchToCharacter(btn.dataset.id));
+  });
+  container.querySelectorAll('.roster-del-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const entry = state.roster.find(e => e.id === btn.dataset.id);
+      if (!entry) return;
+      showConfirm('お別れしますか?',
+        `${entry.character.name}とその思い出(親密度${entry.affection || 0})が消えます。この操作は取り消せません。`,
+        'お別れする', () => deleteRosterCharacter(btn.dataset.id));
+    });
+  });
+}
+
+function switchToCharacter(id) {
+  const idx = state.roster.findIndex(e => e.id === id);
+  if (idx === -1) return;
+  const entry = state.roster[idx];
+  // いまの子を控えに、選んだ子をアクティブに
+  state.roster.splice(idx, 1);
+  state.roster.unshift(snapshotActiveChar());
+  activateCharEntry(entry);
+  saveState();
+
+  renderChara('home-chara', 'smile');
+  initSettingsTab();
+  refreshStatusBar();
+  showToast(`💞 ${state.character.name}と交代しました`);
+  // 久しぶり感のある挨拶 (親密度 0 なら初対面の挨拶)
+  const speech = getSpeech(state.affection === 0 ? 'setup_first' : 'comeback');
+  showBubble(speech);
+  switchTab('home');
+}
+
+function deleteRosterCharacter(id) {
+  state.roster = state.roster.filter(e => e.id !== id);
+  saveState();
+  renderRosterList();
+  showToast('さよなら…');
+}
+
+/** 「あたらしい子をつくる」: いまの子は finishSetup 時に控えへ */
+let wizardMode = 'initial'; // 'initial' | 'add'
+
+function startAddCharacter() {
+  if (1 + state.roster.length >= ROSTER_MAX) {
+    showToast(`キャラは${ROSTER_MAX}人まで。誰かとお別れしてから迎えてください`);
+    return;
+  }
+  wizardMode = 'add';
+  wizardCustom = null;
+  initWizard();
+  goToStep(1);
+  // プレイヤー名を引き継いでおく
+  const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  setVal('s-playerName', state.player.name);
+  setVal('s-callName', state.character.callName);
+  setVal('s-charName', '');
+  setVal('s-firstPerson', '');
+  setVal('s-suffix', '');
+  const cancelBtn = document.getElementById('wizard-cancel-btn');
+  if (cancelBtn) cancelBtn.classList.remove('hidden');
+  document.getElementById('screen-main').classList.add('hidden');
+  document.getElementById('screen-setup').classList.remove('hidden');
+}
+
+function cancelAddCharacter() {
+  wizardMode = 'initial';
+  wizardCustom = null;
+  const cancelBtn = document.getElementById('wizard-cancel-btn');
+  if (cancelBtn) cancelBtn.classList.add('hidden');
+  document.getElementById('screen-setup').classList.add('hidden');
+  document.getElementById('screen-main').classList.remove('hidden');
+  switchTab('settings');
+}
+
 // ─── せってい ────────────────────────────────────────────────
 function initSettingsTab() {
+  renderRosterList();
   // 現在値を読み込んでフォームに反映
   const ch = state.character;
 
@@ -1164,6 +1295,18 @@ function goToStep(n) {
 }
 
 function finishSetup() {
+  // 「あたらしい子をつくる」モードならいまの子を控えに退避し、絆をリセット
+  if (wizardMode === 'add') {
+    state.roster.unshift(snapshotActiveChar());
+    state.character = JSON.parse(JSON.stringify(DEFAULT_STATE.character));
+    state.affection = 0;
+    state.memories = [];
+    wizardMode = 'initial';
+    const cancelBtn = document.getElementById('wizard-cancel-btn');
+    if (cancelBtn) cancelBtn.classList.add('hidden');
+  }
+  state.character.rosterId = state.character.rosterId || uid();
+
   const charName    = (document.getElementById('s-charName') || {}).value || 'ミナト';
   const playerName  = (document.getElementById('s-playerName') || {}).value || 'ぴな';
   const callName    = (document.getElementById('s-callName') || {}).value || playerName;
@@ -1543,6 +1686,13 @@ function openCharImportModal(context) {
   document.getElementById('char-import-error').classList.add('hidden');
   document.getElementById('char-import-preview').classList.add('hidden');
   document.getElementById('char-import-apply').disabled = true;
+  const ow = document.getElementById('char-import-overwrite');
+  if (ow) {
+    ow.checked = false;
+    // 初回セットアップ中はロスター概念がないので隠す
+    const row = ow.closest('.import-overwrite-row');
+    if (row) row.classList.toggle('hidden', importContext === 'setup');
+  }
   modal.classList.remove('hidden');
   setTimeout(() => document.getElementById('char-import-text').focus(), 100);
 }
@@ -1644,7 +1794,24 @@ function applyCharImport() {
     return;
   }
 
-  // せってい: そのまま反映
+  // せってい: 新しい子として迎える (上書きチェック時はいまの子に適用)
+  const overwriteEl = document.getElementById('char-import-overwrite');
+  const overwrite = overwriteEl ? overwriteEl.checked : false;
+  if (!overwrite) {
+    if (1 + state.roster.length >= ROSTER_MAX) {
+      showToast(`キャラは${ROSTER_MAX}人まで。誰かとお別れするか「上書き」にしてください`);
+      return;
+    }
+    // いまの子を控えに、新しい子は親密度ゼロから
+    // (呼ばれたい名前はプレイヤー側の好みなので引き継ぐ)
+    const prevCallName = state.character.callName;
+    state.roster.unshift(snapshotActiveChar());
+    state.character = JSON.parse(JSON.stringify(DEFAULT_STATE.character));
+    state.character.rosterId = uid();
+    state.character.callName = prevCallName;
+    state.affection = 0;
+    state.memories = [];
+  }
   state.character.name = ch.name;
   state.character.personality = ch.personality;
   state.character.firstPerson = ch.firstPerson;
@@ -1768,6 +1935,10 @@ function bindEvents() {
   bind('wizard-art-upload-btn',   () => openArtPicker('setup'));
   bind('settings-art-revert-btn', () => revertCustomArt('settings'));
   bind('wizard-art-revert-btn',   () => revertCustomArt('setup'));
+
+  // 複数キャラ: 追加・ウィザード中止
+  bind('roster-add-btn',    startAddCharacter);
+  bind('wizard-cancel-btn', cancelAddCharacter);
   // モーダル外クリックで閉じる
   ['char-prompt-modal', 'char-import-modal'].forEach(id => {
     const overlay = document.getElementById(id);
@@ -1785,7 +1956,9 @@ function bindEvents() {
   if (confirmOk) {
     confirmOk.addEventListener('click', () => {
       document.getElementById('confirm-overlay').classList.add('hidden');
-      resetData();
+      const cb = _confirmCallback;
+      _confirmCallback = null;
+      if (cb) cb();
     });
   }
 
@@ -1844,12 +2017,24 @@ function bindSetupNavEvents() {
   if (step3Finish) step3Finish.addEventListener('click', finishSetup);
 }
 
-// ─── リセット ────────────────────────────────────────────────
-function showResetConfirm() {
+// ─── 確認ダイアログ (汎用) ──────────────────────────────────────
+let _confirmCallback = null;
+
+function showConfirm(title, message, okLabel, cb) {
+  const titleEl = document.getElementById('confirm-title');
   const msgEl = document.getElementById('confirm-message');
-  if (msgEl) msgEl.textContent = 'すべてのデータ（キャラクター・タスク・思い出・コイン）が消えます。本当にリセットしますか？';
+  const okEl = document.getElementById('confirm-ok');
+  if (titleEl) titleEl.textContent = title;
+  if (msgEl) msgEl.textContent = message;
+  if (okEl) okEl.textContent = okLabel;
+  _confirmCallback = cb;
   const overlay = document.getElementById('confirm-overlay');
   if (overlay) overlay.classList.remove('hidden');
+}
+
+// ─── リセット ────────────────────────────────────────────────
+function showResetConfirm() {
+  showConfirm('確認', 'すべてのデータ（キャラクター・タスク・思い出・コイン）が消えます。本当にリセットしますか？', 'リセットする', resetData);
 }
 
 function resetData() {

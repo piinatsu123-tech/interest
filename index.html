@@ -14,6 +14,7 @@
     <div class="setup-header">
       <h1 class="setup-title">いっしょぐらし</h1>
       <p class="setup-subtitle">はじめましょう！</p>
+      <button class="btn-link hidden" id="wizard-cancel-btn">← やめてもどる</button>
     </div>
 
     <!-- ステップインジケーター -->
@@ -301,6 +302,12 @@
     </div>
     <div class="settings-content">
       <div class="settings-section">
+        <h3 class="settings-section-title">キャラクター</h3>
+        <div id="roster-list" class="roster-list"></div>
+        <button class="btn-secondary roster-add-btn" id="roster-add-btn">＋ あたらしい子をつくる</button>
+      </div>
+
+      <div class="settings-section">
         <h3 class="settings-section-title">キャラクターの見た目</h3>
         <div id="settings-chara-preview" class="chara-preview small"></div>
         <div class="setup-form">
@@ -500,6 +507,10 @@
         <p id="char-import-preview-line" class="import-preview-line"></p>
       </div>
     </div>
+    <label class="import-overwrite-row">
+      <input type="checkbox" id="char-import-overwrite">
+      <span>いまの子を上書きする（チェックなしなら、いまの子は控えに保存されます）</span>
+    </label>
     <div class="modal-actions">
       <button class="btn-secondary" id="char-import-cancel">キャンセル</button>
       <button class="btn-primary" id="char-import-apply" disabled>この子をむかえる</button>

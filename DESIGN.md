@@ -48,6 +48,7 @@
   params: { int, fit, life, sense, grit },   // 自分のパラメーター(ときメモ式)
   streak: { current: 0, best: 0, lastAllDoneDate: null },  // 'YYYY-MM-DD'
   tasks: [],                                 // 旧形式 (移行後は常に空。タスクは ff-tasks へ)
+  roster: [{ id, character, affection, memories }],  // 控えのキャラクター (複数キャラ)
   ff: { enabled, initialized, migrated, rewardedIds: [] },  // FocusFlow 統合の管理
   memories: [{ date, type: 'gift'|'date'|'levelup', label }],  // 新しい順
   stats: { totalCompleted: 0, totalCoinsEarned: 0, totalGifts: 0, totalDates: 0 },
@@ -189,6 +190,26 @@ SPA。`<section>` 切り替え方式。ナビは下部タブバー。
   `handleAllDone` は同日 2 回目以降は何もしない
 - **ホーム**: クイックリストに未完了タスク(非 scheduled)を緊急度バッジ付きで表示。
   チェックは `FFX.toggleDone()` 経由
+
+## 複数キャラクター(ロスター)
+
+複数のキャラクターを保存して切り替えられる。
+
+- **データ**: アクティブキャラは従来どおり `state.character` / `affection` / `memories`
+  に展開(既存コードは無変更で動く)。控えは `state.roster` に
+  `{id, character, affection, memories}` で保存。**親密度と思い出はキャラごと**、
+  コイン・パラメーター・ストリーク・タスクは共有
+- **上限**: アクティブ含め 6 人(`ROSTER_MAX`。customArt の localStorage 容量を考慮)
+- **せってい「キャラクター」セクション**: サムネ+名前+レベル+親密度の一覧。
+  「交代」でスワップ(挨拶は親密度 0 なら `setup_first`、それ以外は `comeback`)、
+  🗑️ で確認ダイアログ付きのお別れ
+- **「＋あたらしい子をつくる」**: セットアップウィザードを追加モードで再利用
+  (`wizardMode='add'`)。完了時にいまの子を控えへ、新しい子は親密度 0 から。
+  「← やめてもどる」でキャンセル可(状態は無変更)
+- **チャットインポートとの連携**: せっていからのインポートはデフォルトで
+  「新しい子として迎える」(いまの子は自動で控えに、呼ばれたい名前は引き継ぐ)。
+  「いまの子を上書きする」チェックで従来の置き換えもできる
+- 確認ダイアログは汎用化(`showConfirm(title, msg, okLabel, cb)`)
 
 ## キャラクターインポート(チャット相談・フルカスタム対応)
 
