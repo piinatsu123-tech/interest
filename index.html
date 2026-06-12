@@ -389,6 +389,16 @@
       <button class="btn-primary settings-save-btn" id="settings-save">保存する</button>
 
       <div class="settings-section">
+        <h3 class="settings-section-title">時間帯と挨拶</h3>
+        <p class="import-desc">挨拶が切り替わる時刻を変えたり、時間帯を追加できます。各時間帯の専用セリフは「セリフを編集」から書けます。</p>
+        <div id="timeslot-list" class="timeslot-list"></div>
+        <div class="import-btn-row" style="margin-top:8px">
+          <button class="btn-secondary" id="timeslot-add">＋ 時間帯を追加</button>
+          <button class="btn-secondary" id="timeslot-reset">標準に戻す</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
         <h3 class="settings-section-title">チャットでキャラを作る</h3>
         <p class="import-desc">AIチャットに相談用プロンプトを貼ってキャラクターを一緒に考え、出てきたJSONをインポートできます。</p>
         <div class="import-btn-row">

@@ -86,6 +86,13 @@ const DEFAULT_STATE = {
   roster: [],
   // おでかけ先のカスタム (標準スポットの上書き+自作スポット)
   customDates: [],
+  // 時間帯 (挨拶と部屋の見た目)。start=開始時 (0-23)、base=トーン (朝昼夕夜)
+  timeSlots: [
+    { id: 'ts-m', start: 5,  name: 'あさ',   base: 'morning' },
+    { id: 'ts-d', start: 10, name: 'ひる',   base: 'day' },
+    { id: 'ts-e', start: 17, name: 'ゆうがた', base: 'evening' },
+    { id: 'ts-n', start: 22, name: 'よる',   base: 'night' }
+  ],
   // FocusFlow 連携 (同一オリジンの localStorage 'ff-tasks' を共有)
   ff: { enabled: true, initialized: false, rewardedIds: [] },
   lastVisit: null
@@ -95,6 +102,7 @@ const DEFAULT_STATE = {
 const STORAGE_KEY = 'isshogurashi_v1';
 let state = null;
 let _lastBubbleText = '';
+let _lastGreetSlotId = null; // この時間帯で挨拶済みか (タブ復帰時の再挨拶判定)
 
 function loadState() {
   try {
@@ -115,6 +123,7 @@ function loadState() {
       if (!Array.isArray(state.memories)) state.memories = [];
       if (!Array.isArray(state.roster)) state.roster = [];
       if (!Array.isArray(state.customDates)) state.customDates = [];
+      state.timeSlots = sanitizeTimeSlots(parsed.timeSlots);
     } else {
       state = JSON.parse(JSON.stringify(DEFAULT_STATE));
     }
@@ -296,18 +305,57 @@ function isEverythingDoneToday() {
   return ff.every(t => t.done);
 }
 
-// ─── 時間帯 ───────────────────────────────────────────────────
-function getTimeSlot() {
-  const h = new Date().getHours();
-  if (h >= 5  && h < 10) return 'morning';
-  if (h >= 10 && h < 17) return 'day';
-  if (h >= 17 && h < 22) return 'evening';
-  return 'night';
+// ─── 時間帯 (カスタマイズ可能) ──────────────────────────────────
+const TIME_BASES = [
+  { id: 'morning', name: '朝' },
+  { id: 'day',     name: '昼' },
+  { id: 'evening', name: '夕' },
+  { id: 'night',   name: '夜' }
+];
+const TIMESLOT_MAX = 8;
+
+/** 保存データの時間帯リストを検証・正規化 (壊れていたら標準に戻す) */
+function sanitizeTimeSlots(raw) {
+  const baseIds = TIME_BASES.map(b => b.id);
+  const list = (Array.isArray(raw) ? raw : [])
+    .filter(t => t && typeof t === 'object')
+    .map(t => ({
+      id: String(t.id || ('ts-' + uid())),
+      start: Math.max(0, Math.min(23, parseInt(t.start, 10) || 0)),
+      name: String(t.name || '').trim().slice(0, 8) || '時間帯',
+      base: baseIds.includes(t.base) ? t.base : 'day'
+    }))
+    .slice(0, TIMESLOT_MAX);
+  if (!list.length) return JSON.parse(JSON.stringify(DEFAULT_STATE.timeSlots));
+  return list.sort((a, b) => a.start - b.start);
 }
 
+/** いまの時刻に当てはまる時間帯エントリ */
+function currentTimeSlot() {
+  const h = new Date().getHours();
+  const slots = (state && state.timeSlots && state.timeSlots.length)
+    ? state.timeSlots
+    : DEFAULT_STATE.timeSlots;
+  // start <= 現在時 の最後のスロット。どれにも当たらなければ最後 (深夜は前日の夜枠)
+  let active = slots[slots.length - 1];
+  for (const slot of slots) {
+    if (slot.start <= h) active = slot;
+  }
+  return active;
+}
+
+/** 互換 API: 見た目トーン ('morning'|'day'|'evening'|'night') を返す */
+function getTimeSlot() {
+  return currentTimeSlot().base;
+}
+
+/** 挨拶の situation。スロット専用のカスタムセリフがあればそれを使う */
 function getGreetingSituation() {
-  const slot = getTimeSlot();
-  return `greeting_${slot}`;
+  const slot = currentTimeSlot();
+  const cd = state.character.customDialogue;
+  const key = 'slot:' + slot.id;
+  if (cd && cd[key]) return key;
+  return `greeting_${slot.base}`;
 }
 
 // ─── 表情 ─────────────────────────────────────────────────────
@@ -686,6 +734,7 @@ function renderHome(comeback) {
   const speech = getSpeech(situation);
   _lastBubbleText = speech;
   showBubble(speech);
+  _lastGreetSlotId = currentTimeSlot().id;
 
   // 今日のタスク
   refreshHomeTaskList();
@@ -772,7 +821,10 @@ function buyGift(giftId) {
   // リアクション
   const custom = state.character.customDialogue;
   let reactions;
-  if (custom && Array.isArray(custom.gift_reaction) && custom.gift_reaction.length) {
+  if (custom && custom.gifts && Array.isArray(custom.gifts[gift.id]) && custom.gifts[gift.id].length) {
+    // このプレゼント専用のカスタム反応
+    reactions = custom.gifts[gift.id];
+  } else if (custom && Array.isArray(custom.gift_reaction) && custom.gift_reaction.length) {
     reactions = custom.gift_reaction;
   } else {
     reactions = (gift.reactions && gift.reactions[effectivePersonality()]) || ['ありがとう…'];
@@ -1437,9 +1489,78 @@ function cancelAddCharacter() {
   switchTab('settings');
 }
 
+// ─── 時間帯エディタ (せってい) ──────────────────────────────────
+function renderTimeSlotList() {
+  const el = document.getElementById('timeslot-list');
+  if (!el) return;
+  const slots = state.timeSlots;
+  el.innerHTML = slots.map(t => `<div class="timeslot-row" data-id="${esc(t.id)}">
+    <select class="ts-start" aria-label="開始時刻">
+      ${Array.from({ length: 24 }, (_, h) =>
+        `<option value="${h}"${h === t.start ? ' selected' : ''}>${h}時〜</option>`).join('')}
+    </select>
+    <input type="text" class="ts-name" maxlength="8" value="${esc(t.name)}" aria-label="名前">
+    <div class="ts-bases">
+      ${TIME_BASES.map(b =>
+        `<button class="ts-base${b.id === t.base ? ' active' : ''}" data-base="${b.id}">${b.name}</button>`).join('')}
+    </div>
+    <button class="ts-del" aria-label="削除"${slots.length <= 1 ? ' disabled' : ''}>🗑️</button>
+  </div>`).join('');
+
+  const commit = () => {
+    saveState();
+    renderTimeSlotList();
+    // ホームの背景・挨拶に即反映
+    if (currentTab === 'home') renderHome(false);
+  };
+  el.querySelectorAll('.timeslot-row').forEach(row => {
+    const slot = state.timeSlots.find(t => t.id === row.dataset.id);
+    if (!slot) return;
+    row.querySelector('.ts-start').addEventListener('change', e => {
+      slot.start = parseInt(e.target.value, 10) || 0;
+      state.timeSlots.sort((a, b) => a.start - b.start);
+      commit();
+    });
+    row.querySelector('.ts-name').addEventListener('change', e => {
+      slot.name = e.target.value.trim().slice(0, 8) || '時間帯';
+      commit();
+    });
+    row.querySelectorAll('.ts-base').forEach(btn => {
+      btn.addEventListener('click', () => {
+        slot.base = btn.dataset.base;
+        commit();
+      });
+    });
+    row.querySelector('.ts-del').addEventListener('click', () => {
+      if (state.timeSlots.length <= 1) return;
+      state.timeSlots = state.timeSlots.filter(t => t.id !== slot.id);
+      commit();
+    });
+  });
+}
+
+function addTimeSlot() {
+  if (state.timeSlots.length >= TIMESLOT_MAX) {
+    showToast(`時間帯は${TIMESLOT_MAX}つまでです`);
+    return;
+  }
+  state.timeSlots.push({ id: 'ts-' + uid(), start: 0, name: 'しんや', base: 'night' });
+  state.timeSlots.sort((a, b) => a.start - b.start);
+  saveState();
+  renderTimeSlotList();
+}
+
+function resetTimeSlots() {
+  state.timeSlots = JSON.parse(JSON.stringify(DEFAULT_STATE.timeSlots));
+  saveState();
+  renderTimeSlotList();
+  showToast('時間帯を標準に戻しました');
+}
+
 // ─── せってい ────────────────────────────────────────────────
 function initSettingsTab() {
   renderRosterList();
+  renderTimeSlotList();
   // 現在値を読み込んでフォームに反映
   const ch = state.character;
 
@@ -1908,6 +2029,20 @@ const DIALOGUE_EDIT_META = [
   { id: 'praise:grit',      label: '根性🔥を褒めるとき' }
 ];
 
+/** 編集できる場面の一覧 (固定 18 + プレゼント別 + カスタム時間帯) */
+function getDialogueEditMeta() {
+  const meta = DIALOGUE_EDIT_META.slice();
+  if (typeof GameData !== 'undefined') {
+    GameData.GIFTS.forEach(g => {
+      meta.push({ id: 'gift:' + g.id, label: `プレゼント: ${g.icon}${g.name}` });
+    });
+  }
+  (state.timeSlots || []).forEach(t => {
+    meta.push({ id: 'slot:' + t.id, label: `「${t.name}」の挨拶 (${t.start}時〜)` });
+  });
+  return meta;
+}
+
 let deCurrentSit = null;
 
 /** その場面のカスタムセリフを平坦な配列で返す (なければ null) */
@@ -1916,6 +2051,7 @@ function deGetPool(sitId) {
   if (!cd) return null;
   let entry;
   if (sitId.startsWith('praise:')) entry = cd.praise && cd.praise[sitId.slice(7)];
+  else if (sitId.startsWith('gift:')) entry = cd.gifts && cd.gifts[sitId.slice(5)];
   else entry = cd[sitId];
   if (!entry) return null;
   if (Array.isArray(entry)) return entry.slice();
@@ -1938,6 +2074,15 @@ function deSetPool(sitId, lines) {
       delete cd.praise[pid];
       if (!Object.keys(cd.praise).length) delete cd.praise;
     }
+  } else if (sitId.startsWith('gift:')) {
+    const gid = sitId.slice(5);
+    if (value) {
+      cd.gifts = cd.gifts || {};
+      cd.gifts[gid] = value;
+    } else if (cd.gifts) {
+      delete cd.gifts[gid];
+      if (!Object.keys(cd.gifts).length) delete cd.gifts;
+    }
   } else if (value) {
     cd[sitId] = value;
   } else {
@@ -1955,7 +2100,17 @@ function dePresetLines(sitId) {
     const d = Dialogue.PARAM_PRAISE[p] || {};
     return (d[sitId.slice(7)] || []).slice();
   }
-  if (sitId === 'gift_reaction') return []; // 標準はプレゼントごとに別なのでコピー元なし
+  if (sitId.startsWith('gift:')) {
+    const g = (typeof GameData !== 'undefined') && GameData.GIFTS.find(x => x.id === sitId.slice(5));
+    return (g && g.reactions && g.reactions[p]) ? g.reactions[p].slice() : [];
+  }
+  if (sitId.startsWith('slot:')) {
+    const slot = (state.timeSlots || []).find(t => 'slot:' + t.id === sitId);
+    const sd2 = slot && (Dialogue.DIALOGUE[p] || {})['greeting_' + slot.base];
+    if (!sd2) return [];
+    return ['low', 'mid', 'high'].reduce((acc, t) => acc.concat(sd2[t] || []), []);
+  }
+  if (sitId === 'gift_reaction') return []; // 汎用は {gift} 込みで書く想定なのでコピー元なし
   const sd = (Dialogue.DIALOGUE[p] || {})[sitId];
   if (!sd) return [];
   return ['low', 'mid', 'high'].reduce((acc, t) => acc.concat(sd[t] || []), []);
@@ -1977,7 +2132,7 @@ function closeDialogueEditor() {
 
 function deRenderList() {
   const el = document.getElementById('de-list');
-  el.innerHTML = DIALOGUE_EDIT_META.map(m => {
+  el.innerHTML = getDialogueEditMeta().map(m => {
     const pool = deGetPool(m.id);
     const status = pool ? `カスタム ${pool.length}本` : '標準';
     return `<button class="de-row${pool ? ' customized' : ''}" data-sit="${esc(m.id)}">
@@ -1992,10 +2147,12 @@ function deRenderList() {
 
 function deOpenSit(sitId) {
   deCurrentSit = sitId;
-  const meta = DIALOGUE_EDIT_META.find(m => m.id === sitId);
+  const meta = getDialogueEditMeta().find(m => m.id === sitId);
   document.getElementById('de-title').textContent = meta.label;
   const hints = ['{user} = 呼び名', '{me} = 一人称'];
   if (meta.ph) hints.push(`${meta.ph} = ${meta.ph === '{task}' ? 'タスク名' : 'プレゼント名'}`);
+  if (sitId.startsWith('gift:')) hints.push('このプレゼント専用 (汎用より優先)');
+  if (sitId.startsWith('slot:')) hints.push('この時間帯専用の挨拶 (空なら標準の挨拶)');
   document.getElementById('de-hint').textContent =
     '1 枠 = 1 セリフ (最大 10 本)。空にして保存すると標準セリフに戻ります。使えるタグ: ' + hints.join(' / ');
   deRenderLines(deGetPool(sitId) || []);
@@ -2169,8 +2326,10 @@ ${charProfileForPrompt()}
 - task_add({task} 可) / task_complete({task} 可) / all_done
 - idle … 立ち絵タップの雑談 (多めに 5 本ほしい)
 - has_overdue / comeback / levelup / setup_first
-- gift_reaction … プレゼントへの反応 ({gift} 可)
-- praise … {"int":[…],"fit":[…],"life":[…],"sense":[…],"grit":[…]} (知性/体力/生活力/感性/根性を褒める)
+- gift_reaction … プレゼント全般への反応 ({gift} 可)
+- gifts … プレゼント別の反応: {"flower":[…],"sweets":[…]} など (id: ${(typeof GameData !== 'undefined' ? GameData.GIFTS : []).map(g => `${g.id}=${g.name}`).join(' / ')})
+- praise … {"int":[…],"fit":[…],"life":[…],"sense":[…],"grit":[…]} (知性/体力/生活力/感性/根性を褒める)${(state.timeSlots || []).length ? `
+- 時間帯専用の挨拶: ${state.timeSlots.map(t => `"slot:${t.id}"(「${t.name}」${t.start}時〜)`).join(' / ')}` : ''}
 
 ルール:
 - 文字列配列なら親密度に関係なく使われる。{"low":[…],"mid":[…],"high":[…]} なら親密度段階別 (low=出会った頃 / high=心を許した仲)
@@ -2305,16 +2464,19 @@ function refreshPartialImport() {
       return;
     }
     partialImportPayload = res.dialogue;
-    const sits = Object.keys(res.dialogue).filter(k => k !== 'praise');
-    const labels = sits.map(sit => {
-      const m = DIALOGUE_EDIT_META.find(x => x.id === sit);
-      return m ? m.label : sit;
-    });
+    const meta = getDialogueEditMeta();
+    const labelFor = (id) => {
+      const m = meta.find(x => x.id === id);
+      return m ? m.label : id;
+    };
+    const labels = Object.keys(res.dialogue)
+      .filter(k => k !== 'praise' && k !== 'gifts')
+      .map(labelFor);
     if (res.dialogue.praise) {
-      Object.keys(res.dialogue.praise).forEach(pid => {
-        const m = DIALOGUE_EDIT_META.find(x => x.id === 'praise:' + pid);
-        if (m) labels.push(m.label);
-      });
+      Object.keys(res.dialogue.praise).forEach(pid => labels.push(labelFor('praise:' + pid)));
+    }
+    if (res.dialogue.gifts) {
+      Object.keys(res.dialogue.gifts).forEach(gid => labels.push(labelFor('gift:' + gid)));
     }
     sumEl.textContent = `✅ ${labels.length} 場面のセリフ: ${labels.join(' / ')}`;
   } else {
@@ -2337,10 +2499,12 @@ function applyPartialImport() {
   if (partialImportMode === 'dialogue') {
     const cd = state.character.customDialogue || {};
     const incoming = partialImportPayload;
-    // praise はサブキー単位でマージ、それ以外は場面単位で上書き
+    // praise / gifts はサブキー単位でマージ、それ以外は場面単位で上書き
     const mergedPraise = Object.assign({}, cd.praise, incoming.praise);
+    const mergedGifts = Object.assign({}, cd.gifts, incoming.gifts);
     state.character.customDialogue = Object.assign({}, cd, incoming);
     if (Object.keys(mergedPraise).length) state.character.customDialogue.praise = mergedPraise;
+    if (Object.keys(mergedGifts).length) state.character.customDialogue.gifts = mergedGifts;
     saveState();
     showToast('💾 セリフを取り込みました');
     if (!document.getElementById('dialogue-editor').classList.contains('hidden')) deRenderList();
@@ -2483,13 +2647,27 @@ function validateCustomDialogue(raw) {
     const e = cleanEntry(raw[sit]);
     if (e) { dialogue[sit] = e; count++; }
   });
+  // カスタム時間帯の専用挨拶 (現在定義されているスロットのみ)
+  (state.timeSlots || []).forEach(t => {
+    const e = cleanEntry(raw['slot:' + t.id]);
+    if (e) { dialogue['slot:' + t.id] = e; count++; }
+  });
   const gift = cleanPool(raw.gift_reaction);
-  if (gift) dialogue.gift_reaction = gift;
+  if (gift) { dialogue.gift_reaction = gift; count++; }
+  // プレゼント別の反応
+  if (raw.gifts && typeof raw.gifts === 'object' && typeof GameData !== 'undefined') {
+    const gifts = {};
+    GameData.GIFTS.forEach(g => {
+      const p = cleanPool(raw.gifts[g.id]);
+      if (p) { gifts[g.id] = p; count++; }
+    });
+    if (Object.keys(gifts).length) dialogue.gifts = gifts;
+  }
   if (raw.praise && typeof raw.praise === 'object') {
     const praise = {};
     ['int', 'fit', 'life', 'sense', 'grit'].forEach(pid => {
       const p = cleanPool(raw.praise[pid]);
-      if (p) praise[pid] = p;
+      if (p) { praise[pid] = p; count++; }
     });
     if (Object.keys(praise).length) dialogue.praise = praise;
   }
@@ -2812,6 +2990,15 @@ function switchTab(tabName) {
   if (tabName === 'home') {
     refreshStatusBar();
     refreshHomeTaskList();
+    // 時間帯の変化を反映 (背景は常に、挨拶はスロットが変わったときだけ)
+    const slot = currentTimeSlot();
+    const roomBg = document.getElementById('room-bg');
+    if (roomBg) roomBg.className = `room-bg time-${slot.base}`;
+    if (_lastGreetSlotId !== null && _lastGreetSlotId !== slot.id) {
+      _lastGreetSlotId = slot.id;
+      showBubble(getSpeech(getGreetingSituation()));
+      renderChara('home-chara', getDefaultExpression());
+    }
   } else if (tabName === 'tasks') {
     if (window.FFX) FFX.renderMain();
   } else if (tabName === 'shop') {
@@ -2887,6 +3074,10 @@ function bindEvents() {
   bind('wizard-art-upload-btn',   () => openArtPicker('setup'));
   bind('settings-art-revert-btn', () => revertCustomArt('settings'));
   bind('wizard-art-revert-btn',   () => revertCustomArt('setup'));
+
+  // 時間帯エディタ
+  bind('timeslot-add',   addTimeSlot);
+  bind('timeslot-reset', resetTimeSlots);
 
   // 複数キャラ: 追加・ウィザード中止
   bind('roster-add-btn',    startAddCharacter);

@@ -2602,3 +2602,58 @@ input[type="color"] {
 }
 .de-footer.hidden { display: none; }
 .de-footer > button { flex: 1; font-size: 12px; }
+
+/* 時間帯エディタ */
+.timeslot-list { display: flex; flex-direction: column; gap: 8px; }
+.timeslot-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 6px 8px;
+}
+.ts-start {
+  border: 1.5px solid var(--border-mid);
+  border-radius: var(--r-sm);
+  padding: 6px 4px;
+  font-size: 12px;
+  background: var(--surface);
+  color: var(--text);
+  flex-shrink: 0;
+}
+.ts-name {
+  flex: 1;
+  min-width: 0;
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.ts-bases { display: flex; gap: 3px; flex-shrink: 0; }
+.ts-base {
+  border: 1.5px solid var(--border-mid);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  padding: 0;
+}
+.ts-base.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.ts-del {
+  border: none;
+  background: none;
+  font-size: 13px;
+  opacity: 0.55;
+  padding: 2px;
+  flex-shrink: 0;
+}
+.ts-del:disabled { opacity: 0.2; }
