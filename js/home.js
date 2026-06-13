@@ -7,7 +7,7 @@ function getDefaultExpression() {
   const slot = getTimeSlot();
   if (slot === 'night') return 'sleepy';
   if (isEverythingDoneToday()) return 'smile';
-  return 'normal';
+  return homeRestExpression();
 }
 
 // ─── セリフ欄表示 (常設・自動で消えない) ────────────────────────

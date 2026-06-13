@@ -171,6 +171,7 @@ SPA。`<section>` 切り替え方式。ナビは下部タブバー(**ホーム /
 - **レベルアップ検知**: 親密度付与のたびに `levelFor` の変化を見て、変化したら `levelup` セリフ+お祝い演出+memories 記録
 - **日付ロールオーバー**(起動時と `visibilitychange` で判定): `lastVisit` と今日が違えば、繰り返しタスクの `done` をリセット(曜日指定は該当曜日のみ表示対象)。単発タスクの完了済みは非表示化(アーカイブ)。2 日以上空いていたら挨拶を `comeback` に差し替え
 - **表情の使い分け**: 通常 normal/smile、完了 joy、プレゼント joy/blush、has_overdue は pout/sad、夜 sleepy など状況に連動
+- **表情差分の出し方**: 画像/SVG 立ち絵に表情差分を登録しているキャラ (`hasExpressionVariants()`) は、登録した表情を実際に使う。タップ時は `homeIdleExpression()` で差分を巡回、休憩中も `homeRestExpression()` でホームに来るたび顔を入れ替えて「1 枚絵で固定」にならないようにする。差分が無いキャラ・パーツ立ち絵は従来どおり normal を基本にする
 
 ## FocusFlow 統合(js/focusflow.js)
 

@@ -30,6 +30,9 @@ function switchTab(tabName) {
       _lastGreetSlotId = slot.id;
       showBubble(getSpeech(getGreetingSituation()));
       renderChara('home-chara', getDefaultExpression());
+    } else if (hasExpressionVariants()) {
+      // 表情差分があるキャラは、ホームに来るたび休憩中の顔を入れ替える (固定回避)
+      renderChara('home-chara', getDefaultExpression());
     }
   } else if (tabName === 'tasks') {
     if (window.FFX) FFX.renderMain();
