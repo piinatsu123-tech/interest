@@ -21,7 +21,7 @@ function switchTab(tabName) {
   // タブごとの更新
   if (tabName === 'home') {
     refreshStatusBar();
-    refreshHomeTaskList();
+    refreshHomeLauncher();
     // 時間帯の変化を反映 (背景は常に、挨拶はスロットが変わったときだけ)
     const slot = currentTimeSlot();
     const roomBg = document.getElementById('room-bg');
@@ -62,9 +62,9 @@ function bindEvents() {
     });
   }
 
-  // ホーム：「すべて見る」ボタン
-  const homeGotoTasks = document.getElementById('home-goto-tasks');
-  if (homeGotoTasks) homeGotoTasks.addEventListener('click', () => switchTab('tasks'));
+  // ホーム：大きめタスクランチャー
+  const homeTaskLauncher = document.getElementById('home-task-launcher');
+  if (homeTaskLauncher) homeTaskLauncher.addEventListener('click', () => switchTab('tasks'));
 
   // デート VN: クリックで進む
   const vnUI = document.getElementById('vn-ui');
@@ -189,7 +189,7 @@ function bindEvents() {
       }
       // FocusFlow 側での完了を検知
       ffCheckExternalCompletions();
-      refreshHomeTaskList();
+      refreshHomeLauncher();
     }
   });
 

@@ -10,18 +10,13 @@ function getDefaultExpression() {
   return 'normal';
 }
 
-// ─── 吹き出し表示 ──────────────────────────────────────────────
+// ─── セリフ欄表示 (常設・自動で消えない) ────────────────────────
 function showBubble(text) {
   const bubble = document.getElementById('home-bubble');
   const textEl = document.getElementById('home-bubble-text');
   if (!bubble || !textEl) return;
   textEl.textContent = text; // textContent で XSS 防止
   bubble.classList.remove('hidden');
-  // 5 秒後に消す
-  clearTimeout(showBubble._timer);
-  showBubble._timer = setTimeout(() => {
-    bubble.classList.add('hidden');
-  }, 5000);
 }
 
 // ─── ホーム画面 ───────────────────────────────────────────────
@@ -63,8 +58,8 @@ function renderHome(comeback) {
   showBubble(speech);
   _lastGreetSlotId = currentTimeSlot().id;
 
-  // 今日のタスク
-  refreshHomeTaskList();
+  // タスクランチャーの残数
+  refreshHomeLauncher();
 }
 
 function refreshStatusBar() {
@@ -79,26 +74,14 @@ function refreshStatusBar() {
   if (strEl)  strEl.textContent  = state.streak.current;
 }
 
-function refreshHomeTaskList() {
-  const container = document.getElementById('home-task-list');
-  if (!container) return;
-  const tasks = ffActiveTasks().filter(t => !t.done);
-  if (tasks.length === 0) {
-    container.innerHTML = '<p style="font-size:12px;color:var(--text-muted);padding:4px 0">今日のタスクは全部終わりました！タスクタブから追加できます。</p>';
-    return;
-  }
-  container.innerHTML = tasks.map(t => `<div class="home-task-item">
-    <button class="home-task-check" data-id="${esc(t.id)}" aria-label="完了"></button>
-    <span class="home-task-label">${esc(ffTaskTitle(t))}</span>
-    <span class="task-diff ff-${esc(t.urgency)}">${esc(FF_URGENCY_LABELS[t.urgency] || '')}</span>
-  </div>`).join('');
-
-  container.querySelectorAll('.home-task-check').forEach(btn => {
-    btn.addEventListener('click', () => {
-      // FFX 経由で完了 → save() → onTasksChanged で報酬付与
-      if (window.FFX) FFX.toggleDone(btn.dataset.id);
-    });
-  });
+/** タスクランチャーの残数サマリーを更新 */
+function refreshHomeLauncher() {
+  const el = document.getElementById('home-task-summary');
+  if (!el) return;
+  const remaining = ffActiveTasks().filter(t => !t.done).length;
+  el.textContent = remaining === 0
+    ? '今日のタスクは全部おわり！'
+    : `のこり ${remaining} 件`;
 }
 
 // ─── きろく ──────────────────────────────────────────────────

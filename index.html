@@ -133,17 +133,7 @@
 
   <!-- ホーム -->
   <section id="tab-home" class="tab-section">
-    <div id="room-bg" class="room-bg">
-      <!-- 窓と家具の CSS 装飾 -->
-      <div class="room-window">
-        <div class="room-sky"></div>
-        <div class="room-curtain left"></div>
-        <div class="room-curtain right"></div>
-      </div>
-      <div class="room-floor"></div>
-      <div class="room-desk"></div>
-      <div class="room-shelf"></div>
-    </div>
+    <div id="room-bg" class="room-bg"></div>
 
     <!-- ステータスバー -->
     <div class="status-bar">
@@ -159,22 +149,25 @@
       </div>
     </div>
 
-    <!-- 立ち絵+吹き出し -->
+    <!-- 立ち絵 -->
     <div class="chara-area">
-      <div id="home-bubble" class="speech-bubble hidden">
-        <p id="home-bubble-text"></p>
-      </div>
       <div id="home-chara" class="home-chara-img" role="button" aria-label="キャラクターをタップ"></div>
     </div>
 
-    <!-- 今日のタスク クイックリスト -->
-    <div class="home-tasks-panel">
-      <div class="panel-header">
-        <span class="panel-title">📋 今日のタスク</span>
-        <button class="btn-link" id="home-goto-tasks">すべて見る</button>
-      </div>
-      <div id="home-task-list" class="home-task-list"></div>
+    <!-- 常設のセリフ欄 -->
+    <div id="home-bubble" class="speech-bubble">
+      <p id="home-bubble-text"></p>
     </div>
+
+    <!-- 大きめタスクランチャー -->
+    <button id="home-task-launcher" class="home-task-launcher" aria-label="タスクを開く">
+      <span class="launcher-icon">📋</span>
+      <span class="launcher-text">
+        <span class="launcher-title">タスク</span>
+        <span class="launcher-sub" id="home-task-summary"></span>
+      </span>
+      <span class="launcher-arrow">›</span>
+    </button>
   </section>
 
   <!-- タスク (FocusFlow) -->
@@ -420,10 +413,6 @@
     <button class="tab-btn active" data-tab="home">
       <span class="tab-icon">🏠</span>
       <span class="tab-label">ホーム</span>
-    </button>
-    <button class="tab-btn" data-tab="tasks">
-      <span class="tab-icon">📋</span>
-      <span class="tab-label">タスク</span>
     </button>
     <button class="tab-btn" data-tab="shop">
       <span class="tab-icon">🎁</span>

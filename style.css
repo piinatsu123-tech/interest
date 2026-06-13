@@ -5,41 +5,41 @@
    ========================================================= */
 
 :root {
-  /* カラーパレット */
-  --pink:        #f7a8c4;
-  --pink-light:  #fce4ec;
-  --pink-dark:   #e8718d;
-  --peach:       #ffd5b8;
-  --lavender:    #e8d5f5;
-  --mint:        #c8f0e0;
-  --sky:         #d0ecff;
-  --yellow:      #fff3c4;
-  --cream:       #fffaf5;
+  /* カラーパレット — FocusFlow に寄せたニュートラル基調 + 控えめなローズ差し色 */
+  --pink:        #d96a8c;   /* 差し色 (ローズ) */
+  --pink-light:  #faf0f3;
+  --pink-dark:   #c2566f;
+  --peach:       #e8a87c;
+  --lavender:    #b9a3d6;
+  --mint:        #7cc6a8;
+  --sky:         #8fb8d9;
+  --yellow:      #e3c04a;
+  --cream:       #FAFAF8;   /* ニュートラル背景 */
 
-  --text:        #4a3040;
-  --text-soft:   #7a5a6a;
-  --text-muted:  #b09aa8;
+  --text:        #1a1a1a;
+  --text-soft:   #666666;
+  --text-muted:  #999999;
 
   --surface:     #ffffff;
-  --surface2:    #fdf4f8;
-  --border:      #f0dde8;
-  --border-mid:  #ddc8d4;
+  --surface2:    #f5f5f3;
+  --border:      #e8e8e8;
+  --border-mid:  #cccccc;
 
-  --accent:      #e8718d;
-  --accent2:     #a78bda;
-  --gold:        #f5c842;
-  --danger:      #e55a5a;
+  --accent:      #d96a8c;
+  --accent2:     #8c79b8;
+  --gold:        #d9a93a;
+  --danger:      #d94f4f;
 
-  /* シャドウ */
-  --shadow-sm:   0 2px 8px rgba(200, 140, 160, 0.12);
-  --shadow-md:   0 4px 20px rgba(180, 100, 130, 0.16);
-  --shadow-lg:   0 8px 32px rgba(160, 80, 110, 0.22);
+  /* シャドウ — 控えめなニュートラル */
+  --shadow-sm:   0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md:   0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-lg:   0 4px 16px rgba(0, 0, 0, 0.10);
 
-  /* 角丸 */
-  --r-sm:  10px;
-  --r-md:  18px;
-  --r-lg:  28px;
-  --r-xl:  40px;
+  /* 角丸 — FocusFlow 同様に控えめ */
+  --r-sm:  8px;
+  --r-md:  12px;
+  --r-lg:  16px;
+  --r-xl:  20px;
 
   /* レイアウト */
   --max-w: 480px;
@@ -54,9 +54,8 @@ html, body {
 }
 
 body {
-  font-family: 'Hiragino Maru Gothic Pro', 'Hiragino Sans', 'BIZ UDGothic',
-               system-ui, -apple-system, sans-serif;
-  background: #f5e6ef;
+  font-family: 'Noto Sans JP', system-ui, -apple-system, sans-serif;
+  background: var(--cream);
   color: var(--text);
   font-size: 14px;
   line-height: 1.6;
@@ -84,7 +83,7 @@ input, textarea { font-family: inherit; }
 @media (min-width: 520px) {
   #screen-main {
     align-items: center;
-    background: #f0d8e8;
+    background: #eeeeec;
   }
   #screen-main > section,
   #screen-main > nav.tab-bar {
@@ -97,7 +96,7 @@ input, textarea { font-family: inherit; }
    セットアップウィザード
    ========================================================= */
 #screen-setup {
-  background: linear-gradient(160deg, #fce4ec 0%, #f3e5f5 50%, #e8eaf6 100%);
+  background: var(--cream);
   overflow-y: auto;
   align-items: center;
   justify-content: flex-start;
@@ -422,7 +421,7 @@ input[type="color"] {
   border-top: 1px solid var(--border);
   display: flex;
   align-items: stretch;
-  box-shadow: 0 -4px 16px rgba(180, 100, 130, 0.1);
+  box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.04);
   z-index: 100;
 }
 .tab-btn {
@@ -476,131 +475,23 @@ input[type="color"] {
    ========================================================= */
 #tab-home {
   position: relative;
-  padding-bottom: 0;
   overflow: hidden;
+  background: var(--cream);
 }
 
+/* 時間帯でほんのり色づく背景 (視認性優先で淡く) */
 .room-bg {
   position: absolute;
   inset: 0;
-  bottom: 0;
   pointer-events: none;
   z-index: 0;
-}
-
-/* 空グラデーション(時間帯で変わる) */
-.room-bg::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  bottom: 45%;
   transition: background 1.2s ease;
+  background: var(--cream);
 }
-
-/* 時間帯クラス */
-.room-bg.time-morning::before {
-  background: linear-gradient(180deg, #ffe0b2 0%, #ffcc80 40%, #ffecb3 100%);
-}
-.room-bg.time-day::before {
-  background: linear-gradient(180deg, #90caf9 0%, #bbdefb 50%, #e3f2fd 100%);
-}
-.room-bg.time-evening::before {
-  background: linear-gradient(180deg, #ff8a65 0%, #ffab91 30%, #ffd54f 70%, #ffe0b2 100%);
-}
-.room-bg.time-night::before {
-  background: linear-gradient(180deg, #1a237e 0%, #283593 40%, #3949ab 80%, #5c6bc0 100%);
-}
-
-/* 床 */
-.room-floor {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 45%;
-  background: linear-gradient(180deg, #f5e6d3 0%, #ede0d4 100%);
-  border-top: 3px solid #e0c8b4;
-}
-
-/* 窓 */
-.room-window {
-  position: absolute;
-  top: 12%;
-  right: 12%;
-  width: 80px;
-  height: 96px;
-  border-radius: 6px 6px 0 0;
-  border: 3px solid #c8a882;
-  background: transparent;
-  overflow: hidden;
-}
-.room-sky {
-  position: absolute;
-  inset: 0;
-  background: inherit;
-}
-.room-curtain {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 22px;
-  background: linear-gradient(90deg, #f8bbd0, #f48fb1);
-  border-radius: 4px;
-}
-.room-curtain.left { left: 0; }
-.room-curtain.right { right: 0; }
-
-/* 机 */
-.room-desk {
-  position: absolute;
-  bottom: 45%;
-  left: 6%;
-  width: 100px;
-  height: 12px;
-  background: #c8a882;
-  border-radius: 4px 4px 0 0;
-}
-.room-desk::after {
-  content: '';
-  position: absolute;
-  top: 12px;
-  left: 8px;
-  width: 84px;
-  height: 8px;
-  background: #a0785a;
-}
-
-/* 棚 */
-.room-shelf {
-  position: absolute;
-  top: 15%;
-  left: 8%;
-  width: 70px;
-  height: 8px;
-  background: #c8a882;
-  border-radius: 2px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-}
-.room-shelf::before {
-  content: '';
-  position: absolute;
-  top: -14px;
-  left: 6px;
-  width: 14px;
-  height: 14px;
-  background: #e8718d;
-  border-radius: 2px;
-}
-.room-shelf::after {
-  content: '';
-  position: absolute;
-  top: -12px;
-  left: 26px;
-  width: 10px;
-  height: 12px;
-  background: #a78bda;
-  border-radius: 2px;
-}
+.room-bg.time-morning { background: linear-gradient(180deg, #fff6e9 0%, var(--cream) 55%); }
+.room-bg.time-day     { background: linear-gradient(180deg, #eef5fb 0%, var(--cream) 55%); }
+.room-bg.time-evening { background: linear-gradient(180deg, #fdeee6 0%, var(--cream) 55%); }
+.room-bg.time-night   { background: linear-gradient(180deg, #eceef7 0%, var(--cream) 55%); }
 
 /* ステータスバー */
 .status-bar {
@@ -608,11 +499,10 @@ input[type="color"] {
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(240, 221, 232, 0.6);
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
 .status-level, .status-coins, .status-streak {
   display: flex;
@@ -631,148 +521,88 @@ input[type="color"] {
   z-index: 5;
   flex: 1;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
-  padding-bottom: 12px;
+  justify-content: center;
   min-height: 0;
+  padding: 12px;
 }
-
 .home-chara-img {
-  width: 160px;
-  height: 208px;
+  width: 168px;
+  height: 218px;
   cursor: pointer;
   transition: transform 0.15s;
-  filter: drop-shadow(0 8px 16px rgba(180, 80, 110, 0.25));
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.12));
 }
-.home-chara-img:hover { transform: scale(1.03) translateY(-2px); }
+.home-chara-img:hover { transform: translateY(-2px); }
 .home-chara-img:active { transform: scale(0.98); }
 .home-chara-img svg { width: 100%; height: 100%; }
 
-/* 吹き出し */
+/* 常設のセリフ欄 — シンプルなカード (吹き出しの尻尾は上向き) */
 .speech-bubble {
   position: relative;
+  z-index: 10;
   background: var(--surface);
-  border: 2px solid var(--border);
+  border: 1px solid var(--border);
   border-radius: var(--r-md);
-  padding: 10px 16px;
-  max-width: 260px;
-  margin-bottom: 10px;
-  box-shadow: var(--shadow-md);
-  animation: bubble-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  padding: 12px 16px;
+  margin: 0 16px 12px;
+  box-shadow: var(--shadow-sm);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .speech-bubble.hidden { display: none !important; }
-.speech-bubble::after {
-  content: '';
-  position: absolute;
-  bottom: -12px;
-  left: 50%;
-  transform: translateX(-50%);
-  border: 6px solid transparent;
-  border-top-color: var(--border);
-}
 .speech-bubble::before {
   content: '';
   position: absolute;
-  bottom: -9px;
+  top: -8px;
   left: 50%;
   transform: translateX(-50%);
-  border: 5px solid transparent;
-  border-top-color: var(--surface);
-  z-index: 1;
+  border: 7px solid transparent;
+  border-bottom-color: var(--surface);
+}
+.speech-bubble::after {
+  content: '';
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 7px solid transparent;
+  border-bottom-color: var(--border);
+  z-index: -1;
 }
 #home-bubble-text {
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   color: var(--text);
   text-align: center;
 }
 
-@keyframes bubble-in {
-  from { opacity: 0; transform: scale(0.8) translateY(8px); }
-  to   { opacity: 1; transform: scale(1) translateY(0); }
-}
-
-/* 今日のタスク パネル */
-.home-tasks-panel {
+/* 大きめタスクランチャー */
+.home-task-launcher {
   position: relative;
   z-index: 10;
-  background: rgba(255, 255, 255, 0.9);
-  border-top: 1px solid var(--border);
-  padding: 10px 14px 12px;
-  flex-shrink: 0;
-  max-height: 200px;
-  overflow-y: auto;
-}
-.panel-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-.panel-title { font-size: 13px; font-weight: 700; color: var(--text); }
-
-.home-task-list { display: flex; flex-direction: column; gap: 5px; }
-.home-task-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
+  gap: 14px;
+  margin: 0 16px 16px;
+  padding: 18px 20px;
   background: var(--surface);
-  border-radius: var(--r-sm);
   border: 1px solid var(--border);
-  transition: all 0.18s;
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
 }
-.home-task-item:hover { border-color: var(--accent); }
-.home-task-check {
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  border: 2px solid var(--border-mid);
-  background: none;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.18s;
-  font-size: 12px;
-}
-.home-task-check:hover { border-color: var(--accent); }
-.home-task-check.done {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-.home-task-label {
-  flex: 1;
-  font-size: 13px;
-  color: var(--text);
-}
-.home-task-label.done { text-decoration: line-through; color: var(--text-muted); }
-.home-task-diff {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 10px;
-}
-.diff-easy   { background: #e8f5e9; color: #2e7d32; }
-.diff-normal { background: #fff3e0; color: #e65100; }
-.diff-hard   { background: #fce4ec; color: #c62828; }
+.home-task-launcher:hover { border-color: var(--border-mid); }
+.home-task-launcher:active { transform: scale(0.99); background: var(--surface2); }
+.launcher-icon { font-size: 28px; flex-shrink: 0; }
+.launcher-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.launcher-title { font-size: 17px; font-weight: 700; color: var(--text); }
+.launcher-sub { font-size: 12px; color: var(--text-soft); }
+.launcher-arrow { font-size: 24px; color: var(--text-muted); flex-shrink: 0; }
 
-/* FocusFlow 連携バッジ (緊急度) */
-.ff-must { background: #fce4ec; color: #c62828; }
-.ff-want { background: #fff3e0; color: #e65100; }
-.ff-nice { background: #e8f5e9; color: #2e7d32; }
-
-/* ホームのクイックリスト内グループ見出し */
-.ff-group-label {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-muted);
-  padding: 6px 0 2px;
-  border-top: 1px dashed var(--border);
-  margin-top: 4px;
-}
 
 /* =========================================================
    タスク画面
@@ -983,7 +813,7 @@ input[type="color"] {
 .spot-lock { font-size: 11px; color: var(--danger); font-weight: 600; }
 .go-btn {
   padding: 8px 18px;
-  background: linear-gradient(135deg, #f8a5c2, var(--accent2));
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
   color: #fff;
   border: none;
   border-radius: var(--r-xl);

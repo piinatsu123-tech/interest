@@ -135,7 +135,7 @@ function ffCheckExternalCompletions() {
   state.ff.rewardedIds = state.ff.rewardedIds.filter(id => existing.has(id));
   saveState();
 
-  refreshHomeTaskList();
+  refreshHomeLauncher();
   refreshStatusBar();
 }
 
