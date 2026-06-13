@@ -230,6 +230,27 @@ function renderChara(containerId, expression) {
   el.innerHTML = CharacterArt.render(state.character.look, expression || 'normal');
 }
 
+/** 立ち絵タップ時に見せる表情を選ぶ。
+    画像立ち絵で表情差分を登録していれば、その差分を順に見せる
+    (= 登録した表情がちゃんと使われる)。パーツ立ち絵は表情を一通り回す。 */
+function homeIdleExpression() {
+  const art = state && state.character && state.character.customArt;
+  let pool;
+  if (art && art.expressions && Object.keys(art.expressions).length) {
+    pool = Object.keys(art.expressions);            // 登録済みの表情差分を見せる
+  } else if (art && (art.base || art.dataUrl)) {
+    pool = ['smile'];                                // 画像立ち絵だが差分未登録 → きほんのみ
+  } else {
+    pool = ['smile', 'joy', 'blush', 'surprised'];   // パーツ立ち絵
+  }
+  const last = homeIdleExpression._last;
+  const choices = pool.filter(e => e !== last);
+  const arr = choices.length ? choices : pool;
+  const pick = arr[Math.floor(Math.random() * arr.length)];
+  homeIdleExpression._last = pick;
+  return pick;
+}
+
 /** プリセットセリフ用の性格 (カスタム時はベース性格に解決) */
 function effectivePersonality() {
   if (typeof Dialogue !== 'undefined' && Dialogue.resolvePersonality) {

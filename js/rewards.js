@@ -140,10 +140,15 @@ function ffCheckExternalCompletions() {
 }
 
 /** 今日のタスクが全部完了しているか */
+/** その日のタスク完了の判定。
+    「今日中に絶対 (must)」が 1 つでもあれば、それを全部終えた時点で「完了」。
+    must が無い場合のみ、対象タスク全部の完了を見る。 */
 function isEverythingDoneToday() {
-  const ff = ffActiveTasks();
-  if (ff.length === 0) return false;
-  return ff.every(t => t.done);
+  const active = ffActiveTasks();
+  if (active.length === 0) return false;
+  const must = active.filter(t => t.urgency === 'must');
+  if (must.length > 0) return must.every(t => t.done);
+  return active.every(t => t.done);
 }
 
 // ─── レベルアップ検知 ──────────────────────────────────────────

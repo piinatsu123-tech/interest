@@ -39,12 +39,11 @@ function renderHome(comeback) {
   if (comeback) {
     situation = 'comeback';
   } else {
-    // 未完了タスクが残っていて夕方以降
+    // 夕方以降に「今日のタスク」がまだ片付いていない (= must が残っている)
     const slot = getTimeSlot();
-    const pending = ffActiveTasks();
     const hasOverdue = (slot === 'evening' || slot === 'night')
-      && pending.length > 0
-      && pending.some(t => !t.done);
+      && !isEverythingDoneToday()
+      && ffActiveTasks().some(t => !t.done);
 
     if (hasOverdue) {
       situation = 'has_overdue';

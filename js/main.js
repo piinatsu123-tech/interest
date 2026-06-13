@@ -58,7 +58,7 @@ function bindEvents() {
       const speech = getSpeech('idle');
       _lastBubbleText = speech;
       showBubble(speech);
-      renderChara('home-chara', 'smile');
+      renderChara('home-chara', homeIdleExpression());
     });
   }
 
