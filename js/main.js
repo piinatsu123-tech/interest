@@ -28,11 +28,13 @@ function switchTab(tabName) {
     if (roomBg) roomBg.className = `room-bg time-${slot.base}`;
     if (_lastGreetSlotId !== null && _lastGreetSlotId !== slot.id) {
       _lastGreetSlotId = slot.id;
+      _homeRestExpr = getDefaultExpression();
+      renderChara('home-chara', _homeRestExpr);
       showBubble(getSpeech(getGreetingSituation()));
-      renderChara('home-chara', getDefaultExpression());
     } else if (hasExpressionVariants()) {
       // 表情差分があるキャラは、ホームに来るたび休憩中の顔を入れ替える (固定回避)
-      renderChara('home-chara', getDefaultExpression());
+      _homeRestExpr = getDefaultExpression();
+      renderChara('home-chara', _homeRestExpr);
     }
   } else if (tabName === 'tasks') {
     if (window.FFX) FFX.renderMain();

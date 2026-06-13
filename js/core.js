@@ -100,6 +100,7 @@ const STORAGE_KEY = 'isshogurashi_v1';
 let state = null;
 let _lastBubbleText = '';
 let _lastGreetSlotId = null; // この時間帯で挨拶済みか (タブ復帰時の再挨拶判定)
+let _homeRestExpr = 'normal'; // セリフポップアップが消えたあとに戻す「休憩中」の表情
 
 function loadState() {
   try {

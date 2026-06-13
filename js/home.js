@@ -16,13 +16,24 @@ function getDefaultExpression() {
   return 'normal';
 }
 
-// ─── セリフ欄表示 (常設・自動で消えない) ────────────────────────
+// ─── セリフポップアップ (しばらく表示してから消える) ──────────────
+const BUBBLE_DURATION = 8000; // 長めに表示
 function showBubble(text) {
   const bubble = document.getElementById('home-bubble');
   const textEl = document.getElementById('home-bubble-text');
   if (!bubble || !textEl) return;
   textEl.textContent = text; // textContent で XSS 防止
   bubble.classList.remove('hidden');
+  // 出るたびにポップアニメをやり直す
+  bubble.style.animation = 'none';
+  void bubble.offsetWidth;
+  bubble.style.animation = '';
+  // 一定時間で消し、表情も休憩中の顔に戻す
+  clearTimeout(showBubble._timer);
+  showBubble._timer = setTimeout(() => {
+    bubble.classList.add('hidden');
+    renderChara('home-chara', _homeRestExpr);
+  }, BUBBLE_DURATION);
 }
 
 // ─── ホーム画面 ───────────────────────────────────────────────
@@ -36,9 +47,9 @@ function renderHome(comeback) {
   // ステータスバー
   refreshStatusBar();
 
-  // 立ち絵
-  const expr = getDefaultExpression();
-  renderChara('home-chara', expr);
+  // 立ち絵 (休憩中の顔。ポップアップが消えたらここへ戻す)
+  _homeRestExpr = getDefaultExpression();
+  renderChara('home-chara', _homeRestExpr);
 
   // セリフ
   let situation;
@@ -53,6 +64,7 @@ function renderHome(comeback) {
 
     if (hasOverdue) {
       situation = 'has_overdue';
+      _homeRestExpr = 'pout'; // 督促中はしょんぼり顔のままにする
       renderChara('home-chara', 'pout');
     } else {
       situation = getGreetingSituation();
