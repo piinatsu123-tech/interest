@@ -1123,15 +1123,20 @@
     return s;
   }
 
+  function itemText(item) {
+    return (item && typeof item === 'object') ? (item.text || '') : (item || '');
+  }
+
   function pick(arr) {
     if (!arr || !arr.length) { return null; }
     if (arr.length === 1) { return arr[0]; }
+    var lastText = itemText(lastLine);
     var candidate;
     var guard = 0;
     do {
       candidate = arr[Math.floor(Math.random() * arr.length)];
       guard++;
-    } while (candidate === lastLine && guard < 8);
+    } while (itemText(candidate) === lastText && guard < 8);
     return candidate;
   }
 
@@ -1151,7 +1156,7 @@
     return (Array.isArray(pool) && pool.length) ? pool : null;
   }
 
-  function get(situation, state, extra) {
+  function pickLine(situation, state, extra) {
     extra = extra || {};
     var tier = (window.GameData && window.GameData.tierFor)
       ? window.GameData.tierFor(state ? state.affection : 0)
@@ -1172,16 +1177,28 @@
       pool = sitData[tier] || sitData.low || sitData.mid || sitData.high;
     }
     var raw = pick(pool);
-    if (raw == null) { return ''; }
+    if (raw == null) { return null; }
     lastLine = raw;
+    var rawText = itemText(raw);
+    var rawExpr = (raw && typeof raw === 'object' && raw.expr) ? raw.expr : null;
     // {task} を format に渡すため state へ一時的に格納
     var taskVal = (extra.task != null) ? extra.task : '';
     var proxyState = state || {};
     var prevTask = proxyState.__task;
     proxyState.__task = taskVal;
-    var out = format(raw, proxyState);
-    proxyState.__task = prevTask; // 元に戻す
-    return out;
+    var formatted = format(rawText, proxyState);
+    proxyState.__task = prevTask;
+    return { text: formatted, expr: rawExpr };
+  }
+
+  function getObj(situation, state, extra) {
+    var result = pickLine(situation, state, extra);
+    return result || { text: '', expr: null };
+  }
+
+  function get(situation, state, extra) {
+    var result = pickLine(situation, state, extra);
+    return result ? result.text : '';
   }
 
   function pata_idle_fallback(pdata) {
@@ -1255,7 +1272,7 @@
     }
   };
 
-  /** パラメーター上昇への褒めセリフを返す (suffix・プレースホルダ適用済み) */
+  /** パラメーター上昇への褒めセリフを返す (suffix・プレースホルダ適用済みの文字列) */
   function praise(paramId, state) {
     var pool = null;
     var custom = state && state.character && state.character.customDialogue;
@@ -1269,13 +1286,33 @@
     var raw = pick(pool);
     if (raw == null) { return ''; }
     lastLine = raw;
-    return format(raw, state);
+    return format(itemText(raw), state);
+  }
+
+  /** praise のセリフを {text, expr} で返す */
+  function praiseObj(paramId, state) {
+    var pool = null;
+    var custom = state && state.character && state.character.customDialogue;
+    if (custom && custom.praise) {
+      pool = customPool(custom.praise[paramId], 'low');
+    }
+    if (!pool) {
+      var data = PARAM_PRAISE[resolvePersonality(state)] || PARAM_PRAISE.tsundere;
+      pool = data[paramId] || data.grit;
+    }
+    var raw = pick(pool);
+    if (raw == null) { return { text: '', expr: null }; }
+    lastLine = raw;
+    var expr = (raw && typeof raw === 'object' && raw.expr) ? raw.expr : null;
+    return { text: format(itemText(raw), state), expr };
   }
 
   window.Dialogue = {
     get: get,
+    getObj: getObj,
     format: format,
     praise: praise,
+    praiseObj: praiseObj,
     resolvePersonality: resolvePersonality,
     DIALOGUE: DIALOGUE,
     PARAM_PRAISE: PARAM_PRAISE

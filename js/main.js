@@ -61,9 +61,8 @@ function bindEvents() {
   if (homeChara) {
     homeChara.addEventListener('click', () => {
       const speech = getSpeech('idle');
-      _lastBubbleText = speech;
-      showBubble(speech);
-      renderChara('home-chara', homeIdleExpression());
+      _lastBubbleText = speech.text;
+      showBubble(speech, homeIdleExpression());
     });
   }
 

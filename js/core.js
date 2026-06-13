@@ -213,9 +213,10 @@ function getGreetingSituation() {
 }
 
 // ─── セリフ取得 ─────────────────────────────────────────────────
+/** 現在のキャラのセリフを {text, expr} で返す。expr は登録された表情 ID (なければ null) */
 function getSpeech(situation, extra) {
-  if (typeof Dialogue === 'undefined') return '…';
-  return Dialogue.get(situation, state, extra || {});
+  if (typeof Dialogue === 'undefined') return { text: '…', expr: null };
+  return Dialogue.getObj(situation, state, extra || {});
 }
 
 // ─── 確認ダイアログ (汎用) ──────────────────────────────────────

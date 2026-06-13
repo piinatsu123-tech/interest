@@ -42,7 +42,30 @@ function getDialogueEditMeta() {
 
 let deCurrentSit = null;
 
-/** その場面のカスタムセリフを平坦な配列で返す (なければ null) */
+/**
+ * セリフごとに選べる表情の選択肢を返す。
+ * カスタム立ち絵 (差分なし) の場合のみ null を返してピッカーを非表示にする。
+ */
+function buildExprOptions() {
+  const art = state.character.customArt;
+  if (art) {
+    if (!art.expressions || !Object.keys(art.expressions).length) return null;
+    return [{ id: 'normal', label: 'きほん' }].concat(
+      Object.keys(art.expressions).map(ex => ({ id: ex, label: EXPR_LABELS[ex] || ex }))
+    );
+  }
+  const exprs = (typeof CharacterArt !== 'undefined') ? CharacterArt.EXPRESSIONS
+    : ['normal', 'smile', 'joy', 'blush', 'pout', 'sad', 'surprised', 'sleepy'];
+  return exprs.map(ex => ({ id: ex, label: EXPR_LABELS[ex] || ex }));
+}
+
+/** セリフ行アイテム (文字列 or {text,expr}) を {text, expr} に正規化 */
+function deNormItem(item) {
+  if (item && typeof item === 'object') return { text: item.text || '', expr: item.expr || '' };
+  return { text: String(item || ''), expr: '' };
+}
+
+/** その場面のカスタムセリフを {text, expr}[] で返す (なければ null) */
 function deGetPool(sitId) {
   const cd = state.character.customDialogue;
   if (!cd) return null;
@@ -51,17 +74,21 @@ function deGetPool(sitId) {
   else if (sitId.startsWith('gift:')) entry = cd.gifts && cd.gifts[sitId.slice(5)];
   else entry = cd[sitId];
   if (!entry) return null;
-  if (Array.isArray(entry)) return entry.slice();
+  if (Array.isArray(entry)) return entry.map(deNormItem);
   // tier 別 {low,mid,high} は編集用に平坦化
   return ['low', 'mid', 'high'].reduce((acc, t) =>
-    acc.concat(Array.isArray(entry[t]) ? entry[t] : []), []);
+    acc.concat(Array.isArray(entry[t]) ? entry[t].map(deNormItem) : []), []);
 }
 
-/** カスタムセリフを保存 (null/空で標準に戻す) */
+/** カスタムセリフを保存 (null/空で標準に戻す)。lines は {text, expr}[] */
 function deSetPool(sitId, lines) {
   if (!state.character.customDialogue) state.character.customDialogue = {};
   const cd = state.character.customDialogue;
-  const value = (lines && lines.length) ? lines : null;
+  // expr が空のときは文字列、設定されているときは {text, expr} オブジェクトで保存
+  const serialize = (items) => items
+    .filter(item => item.text)
+    .map(item => item.expr ? { text: item.text, expr: item.expr } : item.text);
+  const value = (lines && lines.length) ? serialize(lines) : null;
   if (sitId.startsWith('praise:')) {
     const pid = sitId.slice(7);
     if (value) {
@@ -159,19 +186,35 @@ function deOpenSit(sitId) {
   document.getElementById('de-detail').classList.remove('hidden');
 }
 
+function deLineRowHTML(item, exprOptions) {
+  const { text, expr } = deNormItem(item);
+  const pickerHtml = exprOptions
+    ? `<select class="de-expr-select" aria-label="表情">
+        <option value="">−</option>
+        ${exprOptions.map(e =>
+          `<option value="${esc(e.id)}"${expr === e.id ? ' selected' : ''}>${esc(e.label)}</option>`
+        ).join('')}
+      </select>`
+    : '';
+  return `<div class="de-line-row">
+    <div class="de-line-content">
+      <textarea class="de-line" rows="2" maxlength="200"></textarea>
+      ${pickerHtml}
+    </div>
+    <button class="de-line-del" aria-label="削除">🗑️</button>
+  </div>`;
+}
+
 function deRenderLines(lines) {
   const el = document.getElementById('de-lines');
   if (!lines.length) {
     el.innerHTML = '<p class="de-empty">まだカスタムセリフがありません。「＋」で書くか「標準からコピー」で下敷きを入れられます。</p>';
     return;
   }
-  el.innerHTML = lines.map(() =>
-    `<div class="de-line-row">
-      <textarea class="de-line" rows="2" maxlength="200"></textarea>
-      <button class="de-line-del" aria-label="削除">🗑️</button>
-    </div>`).join('');
-  // 値は textarea の value で安全に注入
-  el.querySelectorAll('.de-line').forEach((ta, i) => { ta.value = lines[i]; });
+  const exprOptions = buildExprOptions();
+  el.innerHTML = lines.map(item => deLineRowHTML(item, exprOptions)).join('');
+  // テキストは textarea の value で安全に注入
+  el.querySelectorAll('.de-line').forEach((ta, i) => { ta.value = deNormItem(lines[i]).text; });
   el.querySelectorAll('.de-line-del').forEach(btn => {
     btn.addEventListener('click', () => {
       btn.closest('.de-line-row').remove();
@@ -181,9 +224,12 @@ function deRenderLines(lines) {
 }
 
 function deCollectLines() {
-  return [...document.querySelectorAll('#de-lines .de-line')]
-    .map(ta => ta.value.trim().slice(0, 200))
-    .filter(Boolean)
+  return [...document.querySelectorAll('#de-lines .de-line-row')]
+    .map(row => ({
+      text: row.querySelector('.de-line').value.trim().slice(0, 200),
+      expr: (row.querySelector('.de-expr-select') || {}).value || ''
+    }))
+    .filter(item => item.text)
     .slice(0, 10);
 }
 
@@ -193,20 +239,18 @@ function deAddLine() {
     showToast('セリフは 10 本までです');
     return;
   }
-  lines.push('');
-  // 空行は collect で消えるので直接描画
   const el = document.getElementById('de-lines');
   if (el.querySelector('.de-empty')) el.innerHTML = '';
+  const exprOptions = buildExprOptions();
   const row = document.createElement('div');
-  row.className = 'de-line-row';
-  row.innerHTML = `<textarea class="de-line" rows="2" maxlength="200"></textarea>
-    <button class="de-line-del" aria-label="削除">🗑️</button>`;
-  row.querySelector('.de-line-del').addEventListener('click', () => {
-    row.remove();
+  row.innerHTML = deLineRowHTML({ text: '', expr: '' }, exprOptions);
+  const rowEl = row.firstElementChild;
+  rowEl.querySelector('.de-line-del').addEventListener('click', () => {
+    rowEl.remove();
     if (!document.querySelector('#de-lines .de-line-row')) deRenderLines([]);
   });
-  el.appendChild(row);
-  row.querySelector('.de-line').focus();
+  el.appendChild(rowEl);
+  rowEl.querySelector('.de-line').focus();
 }
 
 function deCopyPreset() {
@@ -216,21 +260,30 @@ function deCopyPreset() {
     return;
   }
   const current = deCollectLines();
+  const currentTexts = new Set(current.map(x => x.text));
   const merged = [...current];
   preset.forEach(l => {
-    if (merged.length < 10 && !merged.includes(l)) merged.push(l);
+    const text = typeof l === 'object' ? l.text : l;
+    if (merged.length < 10 && !currentTexts.has(text)) {
+      merged.push({ text, expr: '' });
+      currentTexts.add(text);
+    }
   });
   deRenderLines(merged);
 }
 
 function deTry() {
   const lines = deCollectLines();
-  const pool = lines.length ? lines : dePresetLines(deCurrentSit);
-  if (!pool.length) return;
-  let line = pool[Math.floor(Math.random() * pool.length)];
-  line = line.replace(/\{task\}/g, 'さんぽ').replace(/\{gift\}/g, '花束');
-  const formatted = (typeof Dialogue !== 'undefined') ? Dialogue.format(line, state) : line;
+  const rawPool = lines.length ? lines : dePresetLines(deCurrentSit).map(l => ({ text: l, expr: '' }));
+  if (!rawPool.length) return;
+  const item = rawPool[Math.floor(Math.random() * rawPool.length)];
+  const rawText = (item.text || '').replace(/\{task\}/g, 'さんぽ').replace(/\{gift\}/g, '花束');
+  const formatted = (typeof Dialogue !== 'undefined') ? Dialogue.format(rawText, state) : rawText;
   document.getElementById('de-preview').textContent = `「${formatted}」`;
+  // 表情が設定されていればホームの立ち絵でプレビュー
+  if (item.expr && typeof renderChara === 'function') {
+    renderChara('home-chara', item.expr);
+  }
 }
 
 function deSave() {
@@ -280,7 +333,8 @@ function charProfileForPrompt() {
   if (cd) {
     const firstLine = (pool) => {
       const arr = Array.isArray(pool) ? pool : (pool && (pool.low || pool.mid || pool.high));
-      return arr && arr[0];
+      const item = arr && arr[0];
+      return item ? (typeof item === 'object' ? item.text : item) : null;
     };
     // よく書かれている場面を優先しつつ、何でもいいので最大 3 本拾う
     const sits = ['idle', 'task_complete', 'setup_first']
@@ -621,8 +675,18 @@ function validateCustomDialogue(raw) {
   const cleanPool = (v) => {
     const arr = Array.isArray(v) ? v : null;
     if (!arr) return null;
-    const lines = arr.filter(x => typeof x === 'string' && x.trim())
-      .map(x => x.trim().slice(0, 200)).slice(0, 10);
+    const lines = arr
+      .map(x => {
+        if (typeof x === 'string') return x.trim() ? x.trim().slice(0, 200) : null;
+        if (x && typeof x === 'object' && typeof x.text === 'string' && x.text.trim()) {
+          const item = { text: x.text.trim().slice(0, 200) };
+          if (x.expr && typeof x.expr === 'string') item.expr = x.expr.trim().slice(0, 20);
+          return item;
+        }
+        return null;
+      })
+      .filter(Boolean)
+      .slice(0, 10);
     return lines.length ? lines : null;
   };
   const cleanEntry = (v) => {

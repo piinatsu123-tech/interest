@@ -57,7 +57,9 @@ function buyGift(giftId) {
   } else {
     reactions = (gift.reactions && gift.reactions[effectivePersonality()]) || ['ありがとう…'];
   }
-  let rawText = pickRandom(reactions, null).replace(/\{gift\}/g, gift.name);
+  const rawItem = pickRandom(reactions, null);
+  const rawText = (rawItem && typeof rawItem === 'object' ? rawItem.text : rawItem || '').replace(/\{gift\}/g, gift.name);
+  const lineExpr = (rawItem && typeof rawItem === 'object' && rawItem.expr) ? rawItem.expr : null;
   const text = (typeof Dialogue !== 'undefined') ? Dialogue.format(rawText, state) : rawText;
 
   // memories
@@ -70,8 +72,7 @@ function buyGift(giftId) {
   saveState();
 
   // UI 更新
-  renderChara('home-chara', Math.random() < 0.5 ? 'joy' : 'blush');
-  showBubble(text);
+  showBubble(text, lineExpr || (Math.random() < 0.5 ? 'joy' : 'blush'));
   showToast(`${gift.icon} ${gift.name}をプレゼント！`);
   renderShop();
   refreshStatusBar();

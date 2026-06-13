@@ -18,7 +18,13 @@ function getDefaultExpression() {
 
 // ─── セリフポップアップ (しばらく表示してから消える) ──────────────
 const BUBBLE_DURATION = 8000; // 長めに表示
-function showBubble(text) {
+/**
+ * セリフをポップアップ表示。speech は文字列 or {text, expr} オブジェクト。
+ * fallbackExpr: speech.expr がないときに使う表情 (省略時は表情を変えない)。
+ */
+function showBubble(speech, fallbackExpr) {
+  const text = (speech && typeof speech === 'object') ? speech.text : speech;
+  const expr = (speech && typeof speech === 'object' && speech.expr) ? speech.expr : (fallbackExpr || null);
   const bubble = document.getElementById('home-bubble');
   const textEl = document.getElementById('home-bubble-text');
   if (!bubble || !textEl) return;
@@ -28,6 +34,8 @@ function showBubble(text) {
   bubble.style.animation = 'none';
   void bubble.offsetWidth;
   bubble.style.animation = '';
+  // セリフに表情が指定されていれば反映
+  if (expr) renderChara('home-chara', expr);
   // 一定時間で消し、表情も休憩中の顔に戻す
   clearTimeout(showBubble._timer);
   showBubble._timer = setTimeout(() => {
@@ -71,7 +79,7 @@ function renderHome(comeback) {
     }
   }
   const speech = getSpeech(situation);
-  _lastBubbleText = speech;
+  _lastBubbleText = speech.text;
   showBubble(speech);
   _lastGreetSlotId = currentTimeSlot().id;
 

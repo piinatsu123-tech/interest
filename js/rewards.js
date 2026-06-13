@@ -86,8 +86,7 @@ function ffCheckExternalCompletions() {
     tasks.forEach(t => { if (t && t.id) _knownTaskIds.add(t.id); });
     if (added.length > 0 && newly.length === 0) {
       const speech = getSpeech('task_add', { task: ffTaskTitle(added[added.length - 1]) });
-      showBubble(speech);
-      renderChara('home-chara', 'smile');
+      showBubble(speech, 'smile');
     }
   }
 
@@ -117,14 +116,13 @@ function ffCheckExternalCompletions() {
     const last = newly[newly.length - 1];
     const lastCat = taskParamCategory(last);
     let speech;
-    if (newly.length === 1 && Math.random() < 0.4 && typeof Dialogue !== 'undefined' && Dialogue.praise) {
-      speech = Dialogue.praise(lastCat, state);
+    if (newly.length === 1 && Math.random() < 0.4 && typeof Dialogue !== 'undefined' && Dialogue.praiseObj) {
+      speech = Dialogue.praiseObj(lastCat, state);
     } else {
       speech = getSpeech('task_complete', { task: ffTaskTitle(last) });
     }
-    _lastBubbleText = speech;
-    showBubble(speech);
-    renderChara('home-chara', 'joy');
+    _lastBubbleText = speech.text;
+    showBubble(speech, 'joy');
     showToast(`🪙+${coins} ✨+${aff} ${paramGainLabel(paramGains)}`);
 
     if (isEverythingDoneToday()) handleAllDone(getEconomy());
@@ -220,8 +218,7 @@ function handleAllDone(eco) {
 
   setTimeout(() => {
     const speech = getSpeech('all_done');
-    showBubble(speech);
-    renderChara('home-chara', 'smile');
+    showBubble(speech, 'smile');
     showToast(`🎉 全完了ボーナス +${eco.allDoneCoins + bonus}🪙`);
   }, 1200);
 }
