@@ -214,7 +214,7 @@
         <div id="timelineContainer" style="padding: 12px 20px 0; display:none;"></div>
         <div style="display:flex;justify-content:flex-end;padding:8px 20px 4px;">
           <button id="deleteModeBtn" onclick="FFX.toggleDeleteMode()"
-            style="border:1.5px solid var(--border-strong);background:none;font-size:14px;font-weight:700;cursor:pointer;padding:4px 12px;border-radius:50px;color:var(--text3);font-family:'Noto Sans JP',sans-serif;transition:all .15s;">🗑 削除</button>
+            style="border:1.5px solid var(--border-strong);background:none;font-size:14px;font-weight:700;cursor:pointer;padding:4px 12px;border-radius:50px;color:var(--text3);font-family:'Noto Sans JP',sans-serif;transition:all .15s;">削除</button>
         </div>
         <div class="scroll" id="allTasksScroll"></div>
       </div>
@@ -418,26 +418,11 @@
 
   <!-- 下部タブバー -->
   <nav class="tab-bar">
-    <button class="tab-btn active" data-tab="home">
-      <span class="tab-icon">🏠</span>
-      <span class="tab-label">ホーム</span>
-    </button>
-    <button class="tab-btn" data-tab="shop">
-      <span class="tab-icon">🎁</span>
-      <span class="tab-label">ショップ</span>
-    </button>
-    <button class="tab-btn" data-tab="date">
-      <span class="tab-icon">🌸</span>
-      <span class="tab-label">おでかけ</span>
-    </button>
-    <button class="tab-btn" data-tab="records">
-      <span class="tab-icon">📖</span>
-      <span class="tab-label">きろく</span>
-    </button>
-    <button class="tab-btn" data-tab="settings">
-      <span class="tab-icon">⚙️</span>
-      <span class="tab-label">せってい</span>
-    </button>
+    <button class="tab-btn active" data-tab="home">ホーム</button>
+    <button class="tab-btn" data-tab="shop">ショップ</button>
+    <button class="tab-btn" data-tab="date">おでかけ</button>
+    <button class="tab-btn" data-tab="records">きろく</button>
+    <button class="tab-btn" data-tab="settings">せってい</button>
   </nav>
 </div>
 

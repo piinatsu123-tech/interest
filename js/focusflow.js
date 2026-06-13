@@ -785,9 +785,9 @@ function renderCategoryChips() {
   const row = document.getElementById('editCategoryRow');
   if (!row) return;
   const params = (window.GameData && GameData.PARAMS) || [];
-  const items = [{ id: null, name: '自動', icon: '✨' }].concat(params);
+  const items = [{ id: null, name: '自動' }].concat(params);
   row.innerHTML = items.map(p =>
-    `<button class="ffx-cat-chip${(editCategory || null) === p.id ? ' active' : ''}" data-cat="${p.id || ''}">${p.icon} ${p.name}</button>`
+    `<button class="ffx-cat-chip${(editCategory || null) === p.id ? ' active' : ''}" data-cat="${p.id || ''}">${p.name}</button>`
   ).join('');
   row.querySelectorAll('.ffx-cat-chip').forEach(btn => {
     btn.addEventListener('click', () => {

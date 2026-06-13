@@ -18,6 +18,10 @@ function switchTab(tabName) {
     b.classList.toggle('active', b.dataset.tab === tabName);
   });
 
+  // タスクタブ表示中は下部タブバーを隠す
+  const tabBar = document.querySelector('.tab-bar');
+  if (tabBar) tabBar.classList.toggle('hidden', tabName === 'tasks');
+
   // タブごとの更新
   if (tabName === 'home') {
     refreshStatusBar();

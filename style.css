@@ -424,24 +424,24 @@ input[type="color"] {
   box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.04);
   z-index: 100;
 }
+.tab-bar.hidden { display: none !important; }
 .tab-btn {
   flex: 1;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
   border: none;
   background: none;
   padding: 6px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'Noto Sans JP', sans-serif;
   transition: color 0.18s;
   color: var(--text-muted);
 }
 .tab-btn:hover { color: var(--accent); }
 .tab-btn.active { color: var(--accent); }
-.tab-btn.active .tab-icon { transform: scale(1.2); }
-.tab-icon { font-size: 20px; transition: transform 0.2s; }
-.tab-label { font-size: 10px; font-weight: 600; }
+#tab-tasks.tab-section { bottom: 0; }
 
 /* =========================================================
    タブセクション 共通
