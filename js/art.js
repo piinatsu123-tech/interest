@@ -236,15 +236,23 @@ function hasExpressionVariants() {
   return !!(art && art.expressions && Object.keys(art.expressions).length);
 }
 
-/** いま見せられる表情のプール。includeBase=true なら「きほん(normal)」も混ぜる */
-function expressionPool(includeBase) {
+/** その表情の差分が登録されているか (normal=きほんは常に有り) */
+function hasVariant(ex) {
+  if (ex === 'normal') return true;
+  const art = state && state.character && state.character.customArt;
+  return !!(art && art.expressions && art.expressions[ex]);
+}
+
+/** いま見せられる表情のプール。
+    差分があるキャラは「きほん(normal)+登録ぶん」を回す。
+    たとえば「きほん+にっこり」の 2 つだけでも、両方を交互に見せて固定にしない。 */
+function expressionPool() {
   const art = state && state.character && state.character.customArt;
   if (hasExpressionVariants()) {
-    const keys = Object.keys(art.expressions);
-    return includeBase ? ['normal'].concat(keys) : keys;
+    return ['normal'].concat(Object.keys(art.expressions));
   }
-  if (art && (art.base || art.dataUrl)) return ['smile']; // 画像立ち絵・差分なし
-  return ['smile', 'joy', 'blush', 'surprised'];          // パーツ立ち絵
+  if (art && (art.base || art.dataUrl)) return ['normal']; // 画像立ち絵・差分なし
+  return ['smile', 'joy', 'blush', 'surprised'];           // パーツ立ち絵
 }
 
 /** プールから直前と違うものをランダムに選ぶ (memoKey ごとに直近を記憶) */
@@ -258,14 +266,14 @@ function pickExpression(pool, memoKey) {
   return pick;
 }
 
-/** 立ち絵タップ時の表情。登録済みの差分を順に見せる (= ちゃんと使われる) */
+/** 立ち絵タップ時の表情。登録済みの差分(+きほん)を順に見せる */
 function homeIdleExpression() {
-  return pickExpression(expressionPool(false), 'idle');
+  return pickExpression(expressionPool(), 'idle');
 }
 
 /** ホームで休憩中に見せる表情。差分があれば巡回して固定にしない */
 function homeRestExpression() {
-  if (hasExpressionVariants()) return pickExpression(expressionPool(true), 'rest');
+  if (hasExpressionVariants()) return pickExpression(expressionPool(), 'rest');
   return 'normal';
 }
 

@@ -5,9 +5,15 @@
 // ─── 表情 ─────────────────────────────────────────────────────
 function getDefaultExpression() {
   const slot = getTimeSlot();
+  // 差分があるキャラは、登録ぶんを巡回して固定にしない。
+  // 夜・全完了の特別な顔は、その差分を登録しているときだけ優先する。
+  if (hasExpressionVariants()) {
+    if (slot === 'night' && hasVariant('sleepy')) return 'sleepy';
+    return homeRestExpression();
+  }
   if (slot === 'night') return 'sleepy';
   if (isEverythingDoneToday()) return 'smile';
-  return homeRestExpression();
+  return 'normal';
 }
 
 // ─── セリフ欄表示 (常設・自動で消えない) ────────────────────────
