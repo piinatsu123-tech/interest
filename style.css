@@ -85,7 +85,8 @@ input, textarea { font-family: inherit; }
     align-items: center;
     background: #eeeeec;
   }
-  #screen-main > section {
+  #screen-main > section,
+  #screen-main > nav.tab-bar {
     width: var(--max-w);
   }
   #screen-date-vn { align-items: center; }
@@ -408,49 +409,38 @@ input[type="color"] {
 /* =========================================================
    タブバー
    ========================================================= */
-/* お部屋ハブ — ゲーム要素への入口メニュー */
-.room-hub {
-  position: relative;
-  z-index: 10;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  margin: 0 12px 12px;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(8px);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-sm);
-}
-.room-hub-btn {
+/* 下部タブバー — お部屋とゲーム要素の行き来 */
+.tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: var(--max-w);
+  height: var(--tab-h);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
   display: flex;
-  flex-direction: column;
+  align-items: stretch;
+  box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.04);
+  z-index: 100;
+}
+.tab-btn {
+  flex: 1;
+  display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
   border: none;
   background: none;
   padding: 6px 2px;
-  cursor: pointer;
-  transition: transform 0.1s;
-}
-.room-hub-btn:active { transform: scale(0.94); }
-.rh-icon { font-size: 24px; }
-.rh-label { font-size: 11px; font-weight: 700; color: var(--text); }
-
-/* サブ画面のもどるボタン */
-.page-back-btn {
-  border: none;
-  background: none;
-  font-size: 26px;
-  line-height: 1;
-  color: var(--text-muted);
-  padding: 0 8px 0 0;
-  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
   font-family: 'Noto Sans JP', sans-serif;
+  transition: color 0.18s;
+  color: var(--text-muted);
 }
-.page-back-btn:active { color: var(--accent); }
-.page-header .coin-display { margin-left: auto; }
+.tab-btn:hover { color: var(--accent); }
+.tab-btn.active { color: var(--accent); }
 
 /* =========================================================
    タブセクション 共通
@@ -458,6 +448,7 @@ input[type="color"] {
 .tab-section {
   position: absolute;
   inset: 0;
+  bottom: var(--tab-h);
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
@@ -661,11 +652,11 @@ input[type="color"] {
   left: 16px;
   right: 16px;
   margin: 0 auto;
-  max-width: 320px;
+  max-width: 340px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
-  padding: 12px 16px;
+  padding: 14px 18px;
   box-shadow: var(--shadow-md);
   text-align: center;
   animation: bubble-pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
@@ -692,8 +683,8 @@ input[type="color"] {
   border-bottom-color: var(--border);
 }
 #home-bubble-text {
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 16px;
+  line-height: 1.7;
   color: var(--text);
   text-align: center;
 }

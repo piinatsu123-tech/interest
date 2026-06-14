@@ -121,12 +121,16 @@ function ffCheckExternalCompletions() {
     } else {
       speech = getSpeech('task_complete', { task: ffTaskTitle(last) });
     }
+    // ユーザーがタスクを完了したら、お部屋に移動してリアクションを見せる
+    // (お部屋を開くと挨拶や休憩中の顔が入るので、その後にリアクションを上書きする)
+    if (_pendingRoomJump && typeof openRoom === 'function') openRoom();
     _lastBubbleText = speech.text;
     showBubble(speech, 'joy');
     showToast(`🪙+${coins} ✨+${aff} ${paramGainLabel(paramGains)}`);
 
     if (isEverythingDoneToday()) handleAllDone(getEconomy());
   }
+  _pendingRoomJump = false;
 
   // FocusFlow 側で削除されたタスクの ID は掃除する
   const existing = new Set(tasks.map(t => t && t.id));

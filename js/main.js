@@ -15,6 +15,12 @@ function switchTab(tabName) {
     s.classList.toggle('hidden', s.id !== `tab-${tabName}`);
   });
 
+  // 下部タブバーの選択状態 (tasks セクションは「お部屋」扱い)
+  const navKey = (tabName === 'tasks') ? 'room' : tabName;
+  document.querySelectorAll('.tab-bar .tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.nav === navKey);
+  });
+
   // 画面ごとの更新
   if (tabName === 'tasks') {
     if (window.FFX) FFX.renderMain();
@@ -29,8 +35,13 @@ function switchTab(tabName) {
   }
 }
 
-/** お部屋 (いっしょぐらし) を開く: FocusFlow を出して room タブにする */
+/** お部屋 (いっしょぐらし) を開く: 開いている詳細画面を閉じ、room タブにする */
 function openRoom() {
+  // 集中モード・グループ詳細のオーバーレイを閉じてから
+  ['ffx-screen-group', 'ffx-screen-focus'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('visible');
+  });
   switchTab('tasks');
   if (window.FFX) FFX.switchTab('room');
 }
@@ -64,9 +75,13 @@ function enterRoom() {
 
 // ─── イベント登録 ────────────────────────────────────────────
 function bindEvents() {
-  // お部屋ハブ: ゲーム要素への入口
-  document.querySelectorAll('.room-hub-btn').forEach(btn => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.room));
+  // 下部タブバー: お部屋 / プレゼント / おでかけ / きろく / せってい
+  document.querySelectorAll('.tab-bar .tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const nav = btn.dataset.nav;
+      if (nav === 'room') openRoom();
+      else switchTab(nav);
+    });
   });
 
   // お部屋：立ち絵クリック
@@ -311,6 +326,8 @@ window.App = {
   state, saveState, switchTab, openRoom, isRoomVisible,
   // FFX (focusflow.js) の room タブ切替時に呼ばれる
   enterRoom: enterRoom,
+  // ユーザーがタスクを完了した瞬間に FFX が呼ぶ (完了後はお部屋へ自動移動)
+  onUserCompletedTask: function () { _pendingRoomJump = true; },
   // FFX (focusflow.js) の save() から毎回呼ばれる
   onTasksChanged: function () { ffCheckExternalCompletions(); }
 };

@@ -101,6 +101,7 @@ let state = null;
 let _lastBubbleText = '';
 let _lastGreetSlotId = null; // この時間帯で挨拶済みか (タブ復帰時の再挨拶判定)
 let _homeRestExpr = 'normal'; // セリフポップアップが消えたあとに戻す「休憩中」の表情
+let _pendingRoomJump = false; // ユーザーがタスクを完了した直後にお部屋へ移動するフラグ
 
 function loadState() {
   try {

@@ -280,6 +280,8 @@ function toggleDone(id) {
   const t = tasks.find(t => t.id === id);
   if (!t) return;
   t.done = !t.done;
+  // 完了にしたときだけ「ユーザーが完了した」と通知 (完了後お部屋へ自動移動)
+  if (t.done && window.App && App.onUserCompletedTask) App.onUserCompletedTask();
   save();
   renderMain();
   if (currentUrgency) renderGroupList();
@@ -451,7 +453,10 @@ function advanceStep() {
 function completeTask() {
   if (focusId) {
     const t = tasks.find(t => t.id === focusId);
-    if (t) { t.done = true; save(); toast('✓ タスク完了！'); }
+    if (t) {
+      if (window.App && App.onUserCompletedTask) App.onUserCompletedTask();
+      t.done = true; save(); toast('✓ タスク完了！');
+    }
   }
   stopTimer();
   document.getElementById('ffx-screen-focus').classList.remove('visible');
