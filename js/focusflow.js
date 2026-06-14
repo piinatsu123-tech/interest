@@ -547,6 +547,8 @@ function switchTab(tab) {
   if (addBtn) addBtn.style.display = (tab === 'room') ? 'none' : '';
   if (tab === 'all') renderAllTasks();
   if (tab === 'room' && window.App && App.enterRoom) App.enterRoom();
+  // 下部ナビをこの画面に合わせて切り替え (タスク/すべて=コンパクト、お部屋=フル)
+  if (window.App && App.refreshBottomNav) App.refreshBottomNav();
 }
 
 // ─── ALL TASKS VIEW ───────────────────────────────────────────────
@@ -1115,6 +1117,7 @@ window.FFX = {
   importFromClipboard, importFromLine,
   // app.js 連携用
   renderMain, addTask,
-  getTasks: function () { return tasks; }
+  getTasks: function () { return tasks; },
+  getCurrentTab: function () { return currentTab; }
 };
 })();

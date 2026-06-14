@@ -15,11 +15,7 @@ function switchTab(tabName) {
     s.classList.toggle('hidden', s.id !== `tab-${tabName}`);
   });
 
-  // 下部タブバーの選択状態 (tasks セクションは「お部屋」扱い)
-  const navKey = (tabName === 'tasks') ? 'room' : tabName;
-  document.querySelectorAll('.tab-bar .tab-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.nav === navKey);
-  });
+  refreshBottomNav();
 
   // 画面ごとの更新
   if (tabName === 'tasks') {
@@ -52,6 +48,24 @@ function isRoomVisible() {
   const room = document.getElementById('ffx-tab-room');
   return !!(tasks && !tasks.classList.contains('hidden')
     && room && room.classList.contains('visible'));
+}
+
+/**
+ * 下部ナビの見せ方を現在の画面に合わせて更新する。
+ * FocusFlow のタスク/すべて表示中はコンパクト (「お部屋」へ行く 1 ボタン)、
+ * お部屋・ゲーム各画面ではフルの 5 タブを出す。
+ */
+function refreshBottomNav() {
+  const bar = document.querySelector('.tab-bar');
+  if (!bar) return;
+  const ffxTab = (window.FFX && FFX.getCurrentTab) ? FFX.getCurrentTab() : 'home';
+  const inTaskView = (currentTab === 'tasks') && (ffxTab !== 'room');
+  bar.classList.toggle('compact', inTaskView);
+  // フル表示時のアクティブ (tasks セクション = お部屋扱い)
+  const navKey = inTaskView ? null : (currentTab === 'tasks' ? 'room' : currentTab);
+  bar.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.nav === navKey);
+  });
 }
 
 /** お部屋タブに入ったときの描画と挨拶 (FFX.switchTab('room') から呼ばれる) */
@@ -324,8 +338,9 @@ if (document.readyState === 'loading') {
 // グローバル公開
 window.App = {
   state, saveState, switchTab, openRoom, isRoomVisible,
-  // FFX (focusflow.js) の room タブ切替時に呼ばれる
+  // FFX (focusflow.js) の上部タブ切替時に呼ばれる
   enterRoom: enterRoom,
+  refreshBottomNav: refreshBottomNav,
   // ユーザーがタスクを完了した瞬間に FFX が呼ぶ (完了後はお部屋へ自動移動)
   onUserCompletedTask: function () { _pendingRoomJump = true; },
   // FFX (focusflow.js) の save() から毎回呼ばれる

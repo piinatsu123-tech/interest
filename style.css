@@ -442,6 +442,23 @@ input[type="color"] {
 .tab-btn:hover { color: var(--accent); }
 .tab-btn.active { color: var(--accent); }
 
+/* コンパクト表示: FocusFlow(タスク/すべて)では「お部屋」へ行く 1 ボタンだけ */
+.tab-bar.compact {
+  align-items: center;
+  padding: 0 16px;
+}
+.tab-bar.compact .tab-btn:not([data-nav="room"]) { display: none; }
+.tab-bar.compact .tab-btn[data-nav="room"] {
+  height: 44px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: var(--shadow-sm);
+}
+.tab-bar.compact .tab-btn[data-nav="room"]:hover { color: #fff; }
+
 /* =========================================================
    タブセクション 共通
    ========================================================= */
