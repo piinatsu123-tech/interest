@@ -425,8 +425,7 @@ input[type="color"] {
   box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.04);
   z-index: 100;
 }
-/* FocusFlow(タスク/すべて)表示中は下部バーを隠す */
-.tab-bar.hidden { display: none !important; }
+/* タブは上部「タスク/すべて」と同じトーン (テキスト+アクティブに下線) */
 .tab-btn {
   flex: 1;
   display: flex;
@@ -434,17 +433,19 @@ input[type="color"] {
   justify-content: center;
   border: none;
   background: none;
+  border-top: 2px solid transparent;
+  margin-top: -1px;
   padding: 8px 2px;
   font-size: 14px;
   font-weight: 700;
   font-family: 'Noto Sans JP', sans-serif;
   white-space: nowrap;
   letter-spacing: -0.3px;
-  transition: color 0.18s;
+  transition: color 0.15s;
   color: var(--text-muted);
 }
-.tab-btn:hover { color: var(--accent); }
-.tab-btn.active { color: var(--accent); }
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--text); border-top-color: var(--text); }
 
 /* =========================================================
    タブセクション 共通
@@ -459,8 +460,6 @@ input[type="color"] {
   flex-direction: column;
 }
 .tab-section.hidden { display: none !important; }
-/* タスク/すべて表示中は下部バーが無いので最下部まで使う */
-#tab-tasks.fullheight { bottom: 0; }
 
 .page-header {
   display: flex;
@@ -652,18 +651,18 @@ input[type="color"] {
 .home-chara-img:active { transform: scale(0.98); }
 .home-chara-img svg { width: 100%; height: 100%; }
 
-/* セリフポップアップ — 立ち絵のすぐ下に中央表示、しばらくで消える */
+/* セリフポップアップ — 立ち絵のすぐ下に中央表示。やわらかいピンク枠 */
 .speech-bubble {
   position: relative;
   z-index: 10;
-  width: calc(100% - 24px);
-  max-width: 380px;
+  width: calc(100% - 28px);
+  max-width: 360px;
   margin: 0 auto;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 16px 20px;
-  box-shadow: var(--shadow-md);
+  border: 2px solid #f2b3c8;
+  border-radius: 20px;
+  padding: 16px 22px;
+  box-shadow: 0 4px 16px rgba(217, 106, 140, 0.14);
   text-align: center;
   animation: bubble-pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
@@ -675,22 +674,22 @@ input[type="color"] {
   top: -8px;
   left: 50%;
   transform: translateX(-50%);
-  border: 7px solid transparent;
+  border: 8px solid transparent;
   border-bottom-color: var(--surface);
   z-index: 1;
 }
 .speech-bubble::after {
   content: '';
   position: absolute;
-  top: -9px;
+  top: -11px;
   left: 50%;
   transform: translateX(-50%);
-  border: 7px solid transparent;
-  border-bottom-color: var(--border);
+  border: 8px solid transparent;
+  border-bottom-color: #f2b3c8;
 }
 #home-bubble-text {
-  font-size: 18px;
-  line-height: 1.7;
+  font-size: 16px;
+  line-height: 1.6;
   font-weight: 500;
   color: var(--text);
   text-align: center;
