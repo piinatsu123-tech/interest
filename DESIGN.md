@@ -1,0 +1,407 @@
+# いっしょぐらし — 設計書
+
+キャラクターと一緒に暮らしながら、日々のタスクをこなしてモチベーションを保つゲーム。
+恋愛シミュレーション+育成ゲームの雰囲気。タスク達成でコインが貯まり、プレゼントやデートに使える。
+
+## 技術方針
+
+- バニラ JS / HTML / CSS のみ。ビルドツール・外部依存・外部通信なし。`file://` で開いても動くこと
+- 永続化は `localStorage` キー `isshogurashi_v1`(JSON 一括保存)
+- UI は日本語。ユーザー入力は必ずエスケープして表示(XSS 対策。`textContent` か専用 `esc()` を使う)
+- スクリプト読み込み順: ライブラリ層 `js/character.js` → `js/gamedata.js` → `js/dialogue.js` → `js/focusflow.js` のあと、アプリ層 `js/core.js` → `js/art.js` → `js/rewards.js` → `js/home.js` → `js/shopdate.js` → `js/editors.js` → `js/settings.js` → `js/main.js`(**main.js は最後**=`init()` を持つ)
+- ライブラリ層の 4 ファイルは `window.*` のグローバル名前空間 1 つだけを公開する。アプリ層 8 ファイルはクラシック `<script>` のスクリプトスコープを共有し(ES モジュールではない)、`window.App` だけを公開する
+- アプリ層は元々 1 枚の `app.js`(約 3300 行)だったが、見通しのため責務ごとに 8 ファイルへ分割した。**動作は不変**(全 e2e 回帰で確認済み)
+
+## ファイル構成と担当
+
+| ファイル | 内容 | 公開名 |
+|---|---|---|
+| `index.html` | 全画面の DOM 骨格 | — |
+| `style.css` | 全スタイル | — |
+| `js/character.js` | SVG 立ち絵レンダラー | `CharacterArt` |
+| `js/gamedata.js` | 経済・レベル・プレゼント・デートの定義データ | `GameData` |
+| `js/dialogue.js` | セリフエンジン+セリフデータ | `Dialogue` |
+| `js/focusflow.js` | FocusFlow タスクシステム移植版 | `FFX` |
+| `js/core.js` | ユーティリティ・DEFAULT_STATE・状態管理・日付ロールオーバー・時間帯スロット・確認ダイアログ | (App 層) |
+| `js/art.js` | SVG サニタイザ・viewBox 補修・`renderChara`・画像立ち絵・表情マネージャ | (App 層) |
+| `js/rewards.js` | FocusFlow 連携・報酬付与・レベルアップ・パラメーター経済 | (App 層) |
+| `js/home.js` | お部屋(部屋背景・ステータスバー・立ち絵・セリフポップアップ)・きろく | (App 層) |
+| `js/shopdate.js` | ショップ・おでかけ一覧・デートエディタ・デート VN | (App 層) |
+| `js/editors.js` | セリフエディタ・部分インポート・キャラインポート | (App 層) |
+| `js/settings.js` | せってい・ロスター・時間帯エディタ・作成ウィザード | (App 層) |
+| `js/main.js` | タブ切替・イベント登録・リセット・`init()`(**最後に読み込む**) | `App` |
+
+## 状態スキーマ(localStorage)
+
+```js
+{
+  version: 1,
+  player: { name: 'ぴな' },                  // プレイヤー名
+  character: {
+    name: 'ミナト',
+    personality: 'tsundere',                 // 'tsundere'|'cool'|'caring'|'genki'|'sweet'
+    firstPerson: 'わたし',                    // 一人称(自由入力)
+    callName: 'ぴな',                         // ユーザーの呼び方(自由入力)
+    suffix: '',                              // 任意の語尾(例:'にゃ')。空なら無効
+    look: {
+      hairStyle: 'long',                     // CharacterArt.HAIR_STYLES のいずれか
+      hairColor: '#6b4f3a', eyeColor: '#4a6fa5',
+      skinTone: '#ffe3cf', outfitColor: '#e8718d',
+      outfitStyle: 'dress',                  // OUTFIT_STYLES のいずれか
+      accessory: 'none'                      // ACCESSORIES のいずれか
+    }
+  },
+  affection: 0,                              // 親密度(累積、減らない)
+  coins: 0,
+  params: { int, fit, life, sense, grit },   // 自分のパラメーター(ときメモ式)
+  streak: { current: 0, best: 0, lastAllDoneDate: null },  // 'YYYY-MM-DD'
+  tasks: [],                                 // 旧形式 (移行後は常に空。タスクは ff-tasks へ)
+  roster: [{ id, character, affection, memories }],  // 控えのキャラクター (複数キャラ)
+  timeSlots: [{ id, start, name, base }],    // 時間帯 (base: morning|day|evening|night)
+  customDates: [{ id, name, icon, price, minLevel, affection, bgClass, script }],
+  ff: { enabled, initialized, migrated, rewardedIds: [] },  // FocusFlow 統合の管理
+  memories: [{ date, type: 'gift'|'date'|'levelup', label }],  // 新しい順
+  stats: { totalCompleted: 0, totalCoinsEarned: 0, totalGifts: 0, totalDates: 0 },
+  lastVisit: 'YYYY-MM-DD'
+}
+```
+
+## 性格プリセット(5 種)
+
+| id | 名前 | 雰囲気 |
+|---|---|---|
+| `tsundere` | ツンデレ | 素直じゃないが根は優しい。親密度が上がるとデレ増量 |
+| `cool` | クール | 落ち着いた敬語まじり。淡々と、でも的確に支えてくれる |
+| `caring` | 世話焼き | おっとり優しいお姉さん/お兄さん気質。とにかく褒めて心配してくれる |
+| `genki` | 元気 | 体育会系の応援団。テンション高くポジティブ |
+| `sweet` | 甘えん坊 | 甘えた・かまってちゃん。一緒にいたがる。達成すると大喜び |
+
+## モジュール契約
+
+### CharacterArt(js/character.js)
+
+```js
+CharacterArt.HAIR_STYLES    // 10種: short, pixie, bob, long, wavy, hime, twintail, ponytail, buns, braids
+CharacterArt.ACCESSORIES    // 8種: none, ribbon, glasses, flower, catears, hairpin, beret, earring
+CharacterArt.OUTFIT_STYLES  // 5種: dress, hoodie, sailor, blazer, yukata (look.outfitStyle)
+CharacterArt.EXPRESSIONS    // ['normal','smile','joy','blush','pout','sad','surprised','sleepy']
+CharacterArt.render(look, expression)  // → SVG マークアップ文字列(viewBox 0 0 200 260)
+```
+
+立ち絵はデフォルメ調(2.5〜3 頭身)。表情は目・眉・口・頬の差分で表現。
+呼び出し側は返り値を立ち絵コンテナの `innerHTML` に入れる(look の色値はカラーピッカー由来の `#hex` のみ)。
+
+### GameData(js/gamedata.js)
+
+```js
+GameData.LEVELS        // [{lv:1,name:'知り合い',min:0}, {lv:2,'友達',60}, {3,'仲良し',150},
+                       //  {4,'親友',300}, {5,'大切な人',500}, {6,'特別な関係',750}]
+GameData.levelFor(affection)   // → LEVELS の該当エントリ
+GameData.tierFor(affection)    // → 'low'(Lv1-2) | 'mid'(Lv3-4) | 'high'(Lv5-6)
+GameData.ECONOMY = {
+  coins:     { easy: 10, normal: 20, hard: 40 },
+  affection: { easy: 2,  normal: 4,  hard: 8 },
+  allDoneCoins: 30, allDoneAffection: 5,
+  streakBonusPerDay: 5, streakBonusCap: 50,   // 全完了時 +min(streak*5, 50) コイン
+}
+GameData.GIFTS   // 10 種程度
+// [{id, name, icon:'🌹', price, affection,
+//    reactions: { tsundere: ['…',…], cool: […], caring: […], genki: […], sweet: […] }}]
+// 価格帯 30〜500、affection は価格の 1/10 程度。reactions は各性格 2 つ以上
+// (プレースホルダ {user}{me} 使用可。エンジンを通すので suffix 変換される)
+GameData.DATE_SPOTS  // 5 箇所
+// [{id, name, icon, price, minLevel, bgClass, affection,
+//    script: [{ speaker:'char'|'narration',
+//               lines: {tsundere:'…',cool:'…',caring:'…',genki:'…',sweet:'…'}  // narration は lines: '…'(共通文字列)
+//            }, …(5〜7 ビート)]}]
+// 例: カフェ(150, Lv1)、映画館(250, Lv2)、水族館(400, Lv3)、遊園地(600, Lv4)、温泉旅行(1000, Lv5)
+// affection は 20〜80。script のキャラのセリフもプレースホルダ可
+```
+
+### Dialogue(js/dialogue.js)
+
+```js
+Dialogue.get(situation, state, extra = {})  // → セリフ文字列
+Dialogue.format(text, state)                // プレースホルダ置換+語尾変換(GameData の reactions/script もこれで処理)
+```
+
+- 抽選: `DIALOGUE[personality][situation][tier]` の配列からランダム。`tier` は `GameData.tierFor(state.affection)`。直前と同じセリフは避ける(2 連続回避)
+- プレースホルダ: `{user}` = character.callName、`{me}` = character.firstPerson、`{task}` = extra.task
+- 語尾変換: `character.suffix` が非空なら、文末の `。!?♪…` の直前に挿入(全文一律。「だよ。」→「だよにゃ。」)
+- セリフデータ: `DIALOGUE[personality][situation] = { low: [3〜5本], mid: […], high: […] }`
+
+**situation 一覧**(5 性格 × 各 tier 3 本以上):
+
+| situation | タイミング |
+|---|---|
+| `greeting_morning` | ホーム表示時 5〜10 時 |
+| `greeting_day` | 10〜17 時 |
+| `greeting_evening` | 17〜22 時 |
+| `greeting_night` | 22〜5 時 |
+| `task_add` | タスク追加時({task} 可) |
+| `task_complete` | タスク完了時({task} 可) |
+| `all_done` | その日の「今日中に絶対(must)」を全部終えた時(must が無ければ全タスク完了時) |
+| `idle` | 立ち絵クリック時(雑談・好意。ここが一番「一緒に暮らしてる感」を出す。各 5 本以上) |
+| `has_overdue` | 未完了タスクが残ったまま夕方以降 |
+| `comeback` | 2 日以上ぶりの訪問(寂しがる・心配する) |
+| `levelup` | 親密度レベルアップ時 |
+| `setup_first` | 初回セットアップ完了直後の挨拶 |
+
+tier による変化の方向: low=まだ距離がある → high=すっかり心を許している。
+特にツンデレは low でツン強め・high でデレ多め、のように**関係の進展が読み取れる**書き分けをする。
+
+## 画面構成(アプリ層 + index.html)
+
+SPA。ベースは FocusFlow(タスク管理)。**上部タブ**(`FFX.switchTab`・`ffx-tabbtn`) **タスク / すべて**。**下部タブバー**(大きめ・`--tab-h: 80px`・上部タブと同じトーン: テキスト+アクティブに線)は画面で姿を変える(`refreshBottomNav()`):
+
+- **タスク/すべて表示中**: FocusFlow 画面下部に「お部屋」へ行く **1 タブだけ**(`.tab-bar.compact`)。タスク/すべてと同じシンプルなトーン
+- **お部屋・ゲーム各画面**: フルの下部タブバー **お部屋 / プレゼント / おでかけ / きろく / せってい**(お部屋の小分類ナビ)
+
+お部屋は下部「お部屋」タブから開く(`openRoom()` → `FFX.switchTab('room')`)。お部屋を開いているときだけ「お部屋」を選択表示。`refreshBottomNav()` は `App.switchTab`・`openRoom`・`FFX.switchTab` から呼ばれ `FFX.getCurrentTab()` を見てコンパクト/フルとアクティブを決める。設計方針: タスク=情報優先・装飾控えめ、お部屋=没入優先・装飾可。お部屋のセリフ吹き出しは立ち絵のすぐ下に中央表示・やわらかいピンク枠(`#f2b3c8`)・本文16px。
+
+1. **セットアップウィザード**(初回のみ・3 ステップ)
+   - Step1 見た目: 髪型・アクセ選択、髪/目/肌/服の色(`<input type="color">`)。プレビューは `CharacterArt.render` をリアルタイム反映
+   - Step2 性格と話し方: 性格 5 択(説明+サンプルセリフ表示)、一人称・語尾(任意)入力
+   - Step3 なまえ: キャラの名前、プレイヤー名、呼ばれたい名前 → 完了で **お部屋**を開き `setup_first` のセリフで出迎える
+2. **タスク(上部タブ・ダッシュボード)**: FocusFlow のメイン(タイムバー+緊急度グループ)。通常起動はここに着地。`information_first`・装飾控えめ。`＋追加` でタスク作成。**タスクを完了するとお部屋へ自動移動**してキャラのリアクション(joy)を見せる(`App.onUserCompletedTask()` → `_pendingRoomJump` → 報酬処理内で `openRoom()`)
+3. **すべて(上部タブ)**: タスク編集(期日タイムライン+全タスク一覧、緊急度の付け替え・削除)
+4. **お部屋**(`#ffx-tab-room`・下部「お部屋」タブで開く): いっしょぐらしの生活面。部屋背景(時間帯 morning/day/evening/night で空のグラデが変化、窓・棚・机・床の CSS 装飾)+ステータスバー(レベル・コイン・ストリーク)+立ち絵(クリックで `idle`。画像立ち絵に表情差分を登録していれば `homeIdleExpression()` がその差分を順に見せる)+**セリフポップアップ**(`#home-bubble`。部屋の下に出て立ち絵には被らない。約 8 秒で消え、消えるとき表情は休憩中の顔 `_homeRestExpr` に戻る)。タブに入ると `App.enterRoom()` が背景更新・スロットが変わっていれば挨拶。`＋追加` は隠す
+   - **プレゼント / おでかけ / きろく / せってい**(下部タブのサブ画面):
+     - **プレゼント**: GIFTS のショップ。購入→お部屋に戻ってキャラのリアクション(reactions から抽選、表情 joy/blush)+memories 記録
+     - **おでかけ(デート)**: DATE_SPOTS 一覧(価格と必要レベル、未達はロック表示)。選ぶと全画面のビジュアルノベル風シーン: 背景(bgClass)+立ち絵+script をクリックで送る → 終了後 affection 付与+memories 記録、お部屋へ戻る
+     - **きろく**: レベル(進捗バー)、ストリーク、累計統計、思い出タイムライン(memories)
+     - **せってい**: キャラの見た目・性格・名前・話し方の再編集、データリセット(要確認)
+   - 各サブ画面からは下部タブの「お部屋」で戻る。`openRoom()` は開いている集中/グループ詳細オーバーレイも閉じてからお部屋を表示する
+
+## ゲームロジック要点(rewards.js / core.js)
+
+- **完了処理**: コイン・親密度付与 → 吹き出しに `task_complete` → `isEverythingDoneToday()` なら続けて `all_done` +ボーナス+ストリーク更新(`lastAllDoneDate` が昨日なら current+1、それ以外は 1)
+- **レベルアップ検知**: 親密度付与のたびに `levelFor` の変化を見て、変化したら `levelup` セリフ+お祝い演出+memories 記録
+- **日付ロールオーバー**(起動時と `visibilitychange` で判定): `lastVisit` と今日が違えば、繰り返しタスクの `done` をリセット(曜日指定は該当曜日のみ表示対象)。単発タスクの完了済みは非表示化(アーカイブ)。2 日以上空いていたら挨拶を `comeback` に差し替え
+- **表情の使い分け**: 通常 normal/smile、完了 joy、プレゼント joy/blush、has_overdue は pout/sad、夜 sleepy など状況に連動
+- **表情差分の出し方**: 画像/SVG 立ち絵に表情差分を登録しているキャラ (`hasExpressionVariants()`) は、登録した表情を実際に使う。タップ時は `homeIdleExpression()` で差分を巡回、休憩中も `homeRestExpression()` でお部屋に来るたび顔を入れ替えて「1 枚絵で固定」にならないようにする。差分が無いキャラ・パーツ立ち絵は従来どおり normal を基本にする
+
+## FocusFlow 統合(js/focusflow.js)
+
+**FocusFlow**(`piinatsu123-tech/focusflow1` v5.2)のタスクシステムを丸ごと移植し、
+タスク管理を完全に統合した。「タスク」タブの中身は FocusFlow の UI そのもの。
+
+- **移植範囲**: メイン画面(タイムバー+緊急度グループ)、すべてタブ(期日タイムライン+
+  削除モード)、グループ詳細(スワイプ削除)、集中モード(タイマーリング+ステップ進行)、
+  タスク/ステップ編集画面、アクションシート、LINE ボット取り込み(Worker `/tasks`)、
+  Worker `/sync` 同期、クリップボード JSON インポート
+- **名前空間**: クラス/ID の衝突回避に `ffx-` プレフィックス
+  (`screen`→`ffx-screen` 等 6 クラス+画面 ID)。CSS 変数は `.ffx` スコープで上書き。
+  公開 API は `window.FFX`(inline onclick と App 層 `rewards.js` の連携用)
+- **データ**: localStorage `ff-tasks`(FocusFlow と同一形式
+  `{id, title, done, urgency: must|want|nice|scheduled, steps, estimate, dueDate?, scheduledDate?}`)。
+  いっしょぐらし独自のタスクモデルは廃止し、初回起動時に未完了分を自動移行
+  (difficulty hard→must / normal→want / easy→nice。`state.ff.migrated`)
+- **追加機能**: ヘッダーの「＋追加」ボタンから新規タスク作成(本家は LINE 取り込みのみ)。
+  タイトル未入力で戻ったら破棄
+- **報酬経路の一元化**: FFX の `save()` が毎回 `App.onTasksChanged()` を呼ぶ →
+  `ffCheckExternalCompletions()` が rewardedIds との差分で新規完了を検知して
+  コイン・親密度付与+キャラのリアクション。アプリ内完了・集中モード完了・
+  LINE 取り込み後の完了・別タブからの完了がすべて同じ経路で処理される
+- **報酬マッピング**: must→hard / want→normal / nice→easy(ECONOMY 準拠)。
+  新規タスク追加時は `task_add` のセリフで反応
+- **全完了判定** (`isEverythingDoneToday`): 非 scheduled のタスクに「今日中に絶対(must)」があれば、**must を全部終えた時点で「その日は完了」**(want/nice が残っていても OK)。must が 1 件も無い場合のみ、非 scheduled の全タスク完了で判定。
+  `handleAllDone` は同日 2 回目以降は何もしない
+- **タスクはホーム/すべてタブで管理**。お部屋にはタスク一覧を載せず、キャラの生活・ゲーム要素のみ置く
+
+## 複数キャラクター(ロスター)
+
+複数のキャラクターを保存して切り替えられる。
+
+- **データ**: アクティブキャラは従来どおり `state.character` / `affection` / `memories`
+  に展開(既存コードは無変更で動く)。控えは `state.roster` に
+  `{id, character, affection, memories}` で保存。**親密度と思い出はキャラごと**、
+  コイン・パラメーター・ストリーク・タスクは共有
+- **上限**: アクティブ含め 6 人(`ROSTER_MAX`。customArt の localStorage 容量を考慮)
+- **せってい「キャラクター」セクション**: サムネ+名前+レベル+親密度の一覧。
+  「交代」でスワップ(挨拶は親密度 0 なら `setup_first`、それ以外は `comeback`)、
+  🗑️ で確認ダイアログ付きのお別れ
+- **「＋あたらしい子をつくる」**: セットアップウィザードを追加モードで再利用
+  (`wizardMode='add'`)。完了時にいまの子を控えへ、新しい子は親密度 0 から。
+  「← やめてもどる」でキャンセル可(状態は無変更)
+- **チャットインポートとの連携**: せっていからのインポートはデフォルトで
+  「新しい子として迎える」(いまの子は自動で控えに、呼ばれたい名前は引き継ぐ)。
+  「いまの子を上書きする」チェックで従来の置き換えもできる
+- 確認ダイアログは汎用化(`showConfirm(title, msg, okLabel, cb)`)
+
+## セリフエディタ(アプリ内編集)
+
+キャラのセリフ(イベント時の反応)をアプリから直接編集できる。
+
+- **入口**: せってい「性格と話し方」→「📝 セリフを編集」。全画面エディタ
+  (一覧→場面詳細の 2 階層、`#dialogue-editor`)
+- **編集対象**: 12 situation + `gift_reaction`({gift})+ `praise` 5 種+
+  **プレゼント別 10 種**(`gift:<id>` → `customDialogue.gifts[id]`。
+  解決順: プレゼント専用 > 汎用 gift_reaction > プリセット)+
+  **時間帯の専用挨拶**(`slot:<id>` → `customDialogue['slot:<id>']`)。
+  一覧は `getDialogueEditMeta()` で動的生成、「標準 / カスタム n本」の状態表示
+- **保存先**: アクティブキャラの `customDialogue[situation]`(平坦配列)。
+  **エンジンはカスタムを性格に関係なくオーバーレイ**するので、プリセット性格の
+  子にも場面単位で部分上書きできる(書いてない場面は標準のまま)。
+  tier 別 `{low,mid,high}` の既存データは編集時に平坦化される
+- **操作**: 1 枠=1 セリフ(最大 10 本・200 文字)。「＋追加」「📋 標準からコピー」
+  (ベース性格のプリセットを下敷きに)、「🎤 ためす」(語尾・プレースホルダ適用後の
+  プレビュー)、「標準に戻す」(その場面のカスタム削除)。空にして保存=標準
+- gift_reaction はプリセットがプレゼント別定義のためコピー元なし
+- `Dialogue.PARAM_PRAISE` を公開(コピー用)。表示は textContent 経由で XSS 安全
+
+## デートシナリオエディタ
+
+おでかけ先のシナリオをアプリから編集・自作できる。
+
+- **入口**: おでかけタブの各カード右上 ✏️(標準スポットの上書き編集)と
+  「＋あたらしいおでかけ先をつくる」
+- **データ**: `state.customDates` に保存(共有・上限 12 件)。標準スポットと同 id なら
+  上書き、別 id (`cd-…`) なら追加。`effectiveDateSpots()` がマージして
+  一覧・再生の両方が参照する。標準上書きは `statReq` を引き継ぐ
+- **カスタム台本の形式**: `script: [{speaker:'char'|'narration', text:'…'}]`
+  (標準の性格別 `lines` と違い共通文字列。`renderVNBeat` が両形式を解釈し、
+  {user}/{me}/語尾は `Dialogue.format` で適用)
+- **編集項目**: なまえ・アイコン(絵文字)・価格・ごほうび親密度・解放レベル(チップ)・
+  背景(既存 5 種の vn-* から選択)・台本(キャラ/ナレ切替トグル+本文、最大 12 コマ)
+- **▶ ためす**: コイン消費・報酬・思い出記録なしの試し再生(`vnState.preview`)。
+  終了後は下書きを保持したままエディタに戻る
+- **削除**: 自作スポットは確認ダイアログ付き削除、標準上書きは「標準のシナリオに戻す」
+
+## 画像立ち絵の表情差分
+
+- せってい「見た目」の**表情さべつグリッド**(きほん+7 表情スロット)。スロットを
+  タップして画像を登録すると、完了=よろこび・夜=おねむ等で自動で切り替わる
+- データ: `customArt.expressions[expr]` に dataURL。**SVG と画像の混在可**
+  (`artFragmentHTML()` が値の形式で出し分け)。きほんスロットのタップは
+  base の差し替え(SVG 立ち絵を画像に置換も可)。✕ で表情単位の削除
+- `saveState()` が容量超過時にトースト警告(画像の入れすぎ検知)
+
+## 時間帯のカスタマイズ
+
+挨拶が切り替わる時刻と時間帯の数を変えられる。
+
+- **データ**: `state.timeSlots = [{id, start(0-23), name(8文字), base}]`(共有・最大 8・最小 1)。
+  base は朝/昼/夕/夜のトーンで、**部屋の背景・表情(夜=sleepy)・督促判定(夕/夜)**と
+  専用セリフが無いときの挨拶フォールバック(`greeting_<base>`)を決める
+- `currentTimeSlot()`: start <= 現在時 の最後のスロット(どれにも当たらなければ
+  最後のスロット=日付をまたぐ夜枠)。`getTimeSlot()` は互換 API として base を返す
+- **時間帯専用の挨拶**: セリフエディタの `slot:<id>` 行に書くと
+  `getGreetingSituation()` がそれを優先(キャラごと)。セリフインポートも
+  `"slot:<id>"` キーを受け付け、相談プロンプトに現在のスロット一覧を自動掲載
+- **せってい「時間帯と挨拶」**: 開始時刻セレクト・名前・base チップ・削除(最後の
+  1 つは不可)・追加・標準に戻す。変更は即保存
+- お部屋タブに入ったとき(`App.enterRoom()`)背景は常に最新化し、**スロットが変わっていたら挨拶し直す**
+  (`_lastGreetSlotId`)。プレゼント直後などの吹き出しは上書きしない
+
+## 部分インポート(セリフ集 / デート台本)
+
+キャラ作成後でも、AI チャットに書いてもらったセリフやデート台本だけを取り込める
+(キャラ本体は変更しない)。共通モーダル `#partial-import-modal`。
+
+- **セリフ**: セリフエディタ一覧のフッター「💬 相談プロンプト」「📥 セリフをインポート」。
+  形式は `{"dialogue": {…}}`(素の場面オブジェクトも許容)。
+  `validateCustomDialogue` で検証し、**書いてある場面だけ既存 customDialogue にマージ**
+  (praise はサブキー単位でマージ)
+- **デート台本**: おでかけタブの「💬 相談プロンプト」「📥 台本をインポート」。
+  形式は `{"dates": […]}`(単体オブジェクト・素配列も許容、一度に 5 件まで)。
+  `validateDateImport` で検証し customDates へ upsert(標準 id なら上書き+statReq 引き継ぎ、
+  不明 id は新規扱い)
+- **相談プロンプトにはいまの子のプロフィールを自動埋め込み**
+  (`charProfileForPrompt()`: 名前・性格・一人称・語尾・既存セリフから声のサンプル最大 3 本)
+  ので、AI がその子の口調で書ける
+- 貼り付けは `parseCharacterJSON` を共用(コードフェンス・スマート引用符に寛容)。
+  検証後にサマリ(場面ラベル/スポット概要)を表示してから「取り込む」
+
+## キャラクターインポート(チャット相談・フルカスタム対応)
+
+AI チャットで相談して作ったキャラクターを JSON で取り込める。
+プリセット(5 性格×パーツ組合せ)だけでなく、**性格=セリフ集ごと自作**・
+**見た目=SVG 絵ごと自作**のフルカスタムに対応。
+
+### フルカスタム性格
+
+- JSON: `personality: "custom"` + `personalityLabel`(表示名)+
+  `basePersonality`(プリセットのどれか)+ `dialogue`(セリフ集)
+- `dialogue[situation]` は文字列配列(全 tier 共通)or `{low,mid,high}`。
+  12 場面+`gift_reaction`({gift} 可)+`praise.{int,fit,life,sense,grit}`
+- 書いた場面だけカスタムが使われ、無い場面とデート VN は basePersonality に
+  フォールバック(`Dialogue.resolvePersonality`)
+- プリセット personality + dialogue 同時指定は「プリセット改」として custom 扱い
+- 検証: 1 行 200 文字・1 プール 10 本まで。表示は textContent 経由で XSS 安全
+- せってい/ウィザードの性格グリッドに「💎 (ラベル)」カードが追加され、
+  プリセットとカスタムを行き来できる(カスタムデータは保持)
+
+### 画像アップロード立ち絵
+
+- せってい/ウィザードの「📷 画像から作る」で任意の画像ファイルを立ち絵にできる
+  (AI 生成イラスト・手描き・写真など何でも)
+- canvas で最大 400×520 にリサイズ → dataURL (PNG、重ければ JPEG 0.85)。
+  900KB 超は拒否。`data:image/(png|jpeg);base64,...` の形式検証をして
+  `state.character.customArt = { dataUrl }` に保存
+- 「↩️ パーツ編集に戻す」で customArt を消してパラメトリック表示に戻せる
+  (SVG インポートの取り消しにも使える)
+
+### フルカスタム立ち絵 (SVG)
+
+- JSON: `svg`(viewBox 0 0 200 260)+任意の `svgExpressions`(表情差分。
+  無い表情は base を使う)
+- **サニタイズ必須**: `sanitizeSVG()` が許可リスト方式で要素
+  (path/circle/rect/polygon/g/defs/gradient 等)と属性のみ通す。
+  script・image・foreignObject・on* 属性・外部 URL・`url()`(内部 `#id` 参照以外)は
+  除去。100KB 上限。サニタイズ済み文字列を `state.character.customArt` に保存し、
+  描画時はそのまま innerHTML(再検証不要)
+- **チャット出力への寛容さ**: viewBox が無ければ width/height から合成
+  (強制 0 0 200 260 だと絵が見切れる)。`<style>` 要素と `style` 属性は
+  安全なプロパティ(fill/stroke/opacity 系のみ・url() と javascript は拒否)を
+  属性へインライン化。XML として壊れていても HTML パーサーでフォールバック
+- **自動修復**: 起動時に `repairCustomArtViewBox()` が保存済み立ち絵の getBBox を
+  測り、内容の大半が viewBox 外(旧サニタイザーの強制 viewBox 等)なら
+  bbox+4% パディングに合わせ直して保存し直す
+- `renderChara()` が customArt を優先描画(ホーム/VN/レベルアップ/せってい共通)。
+  パラメトリック look はフォールバックとして保持
+
+### 共通
+
+- **相談用プロンプト**: せっていの「📋 相談用プロンプト」でコピー。スキーマと選択肢
+  (性格 5 種・髪型・アクセ・色形式・文字数制限)は `CharacterArt`/`PERSONALITY_NAMES`
+  から動的生成するので、データを増やせばプロンプトも追従する
+- **JSON 形式**: `{ name, personality, firstPerson, callName, suffix, look: {...} }`
+  (state.character と同形。callName は省略可=現状維持)
+- **取り込み口**: せっていの「📥 インポート」(即反映してホームで挨拶)と、
+  セットアップウィザード Step1 のリンク(ウィザードに流し込んで Step3 の名前確認へ)
+- **入力の揺れ吸収**: スマート引用符の正規化+最初の `{`〜最後の `}` 抽出
+  (コードフェンスや前後の文章ごと貼って OK)。FocusFlow のインポートと同じ思想
+- **検証**: personality/hairStyle/accessory はホワイトリスト、色は `#hex` のみ
+  (SVG に埋め込むため厳格に)、名前系は文字数クランプ。エラーは日本語で列挙して
+  チャットに修正依頼しやすくする
+- **プレビュー**: 貼り付けと同時に立ち絵+性格+その子の声のサンプル
+  (`setup_first` を語尾・一人称適用で)を表示し、「この子をむかえる」で確定。
+  コイン・親密度・パラメーター等の進行データは維持される
+
+## 自分のパラメーター(ときメモ式)
+
+タスク完了で「自分」のパラメーターが上がる成長システム。コイン・親密度と併存する第三の軸。
+
+- **5 種**: 知性📚 / 体力💪 / 生活力🏠 / 感性🎨 / 根性🔥(`GameData.PARAMS`)
+- **上昇量**: 緊急度依存 `PARAM_GAIN = { must: 3, want: 2, nice: 1 }`
+- **カテゴリ決定**: タスク編集画面のカテゴリチップ(手動)>
+  `GameData.classifyTask(title)` のキーワード自動分類(LINE 取り込み等)> フォールバック根性。
+  ff-task に `category` フィールドとして保存
+- **褒めセリフ**: `Dialogue.praise(paramId, state)`。
+  `PARAM_PRAISE[personality][paramId]`(5×5×2 本)。単独完了の 40% で task_complete の代わりに使う
+- **見える化**: きろくに SVG レーダーチャート(5 角形・3 リング目盛・軸は 10 刻み自動スケール)
+  +バー付き一覧
+- **デート解放条件**: `DATE_SPOTS[].statReq = { param, value }` をレベル条件と併用。
+  映画館=感性3、水族館=知性6、遊園地=体力10、温泉旅行=生活力15。
+  ロック表示は「🎨感性3で解放」、`startDate` でも再ガード
+- **トースト**: 報酬表示にパラメーター上昇を併記(例 `🪙+40 ✨+8 💪+3`)
+
+## ビジュアルトーン
+
+- **FocusFlow に寄せたニュートラル基調**。背景 `#FAFAF8`、カード白、文字 `#1a1a1a`、境界線は細い `#e8e8e8`、フォントは `Noto Sans JP`。シンプルで視認性優先
+- 差し色は控えめなローズ 1 色(`--accent: #d96a8c`)。主要アクションのボタンやレーダーチャート・選択中チップなどに限って使う
+- 配色は `:root` の CSS 変数に集約。変数を差し替えるだけで全画面が連動して色を変える(`.ffx` スコープの FocusFlow と同じニュートラルパレットに整合)
+- 角丸・影は控えめ(`--r-sm/md/lg = 8/12/16px`、影は薄いグレー)
+- お部屋背景は CSS だけで描く部屋(窓+時間帯で変わる空のグラデ、棚・机・床のシルエット)。セリフはポップアップ(部屋の下・下部タブバーのすぐ上に出て立ち絵に被らず、文字は 16px の読みやすいサイズ、約 8 秒で消え、表情も休憩中に戻す)、ステータスバーはニュートラルなカードで載せる。お部屋は没入優先なので絵文字アイコンも許容。デート VN のシーン背景も演出として鮮やかな配色を残す
+- スマホ幅(375px〜)優先のレスポンシブ。PC では中央 480px カラム

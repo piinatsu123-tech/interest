@@ -1,114 +1,730 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Interests</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>いっしょぐらし</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="app">
-    <aside id="sidebar">
-      <div class="logo">
-        <span class="logo-icon">◈</span>
-        <span class="logo-text">Interests</span>
+
+<!-- ===================== セットアップウィザード ===================== -->
+<div id="screen-setup" class="screen">
+  <div class="setup-container">
+    <div class="setup-header">
+      <h1 class="setup-title">いっしょぐらし</h1>
+      <p class="setup-subtitle">はじめましょう！</p>
+      <button class="btn-link hidden" id="wizard-cancel-btn">← やめてもどる</button>
+    </div>
+
+    <!-- ステップインジケーター -->
+    <div class="step-indicator">
+      <div class="step-dot active" data-step="1"></div>
+      <div class="step-line"></div>
+      <div class="step-dot" data-step="2"></div>
+      <div class="step-line"></div>
+      <div class="step-dot" data-step="3"></div>
+    </div>
+
+    <!-- Step 1: 見た目 -->
+    <div id="setup-step-1" class="setup-step active">
+      <h2 class="setup-step-title">✨ キャラクターの見た目</h2>
+
+      <div class="setup-preview-wrap">
+        <div id="setup-chara-preview" class="chara-preview"></div>
+      </div>
+      <div class="wizard-import-row">
+        <button class="btn-link" id="wizard-import-btn">💬 チャットで作った子をインポート</button>
+        <button class="btn-link" id="wizard-art-upload-btn">📷 画像から作る</button>
+        <button class="btn-link hidden" id="wizard-art-revert-btn">↩️ パーツ編集に戻す</button>
       </div>
 
-      <nav class="nav-section">
-        <button class="nav-item active" data-view="inbox">
-          <span class="nav-icon">⊞</span> Inbox
-          <span class="nav-count" id="count-inbox"></span>
-        </button>
-        <button class="nav-item" data-view="recent">
-          <span class="nav-icon">◷</span> Recent
-          <span class="nav-count" id="count-recent"></span>
-        </button>
-        <button class="nav-item" data-view="favorites">
-          <span class="nav-icon">★</span> Favorites
-          <span class="nav-count" id="count-favorites"></span>
-        </button>
-      </nav>
-
-      <div class="section-label">Categories</div>
-      <nav class="nav-section" id="category-nav"></nav>
-
-      <div class="section-label">Tags</div>
-      <div class="tag-cloud" id="tag-cloud"></div>
-    </aside>
-
-    <main id="main">
-      <header class="main-header">
-        <div class="search-wrapper">
-          <span class="search-icon">⌕</span>
-          <input type="text" id="search-input" placeholder="Search interests…" autocomplete="off">
+      <div class="setup-form">
+        <div class="form-row">
+          <label>髪型</label>
+          <div id="hairStyle-select" class="chip-group"></div>
         </div>
-        <button id="random-btn" title="Show a random interest">⚄ Random</button>
-        <button id="add-btn" class="btn-primary">+ Add</button>
-      </header>
-
-      <div id="view-title" class="view-title">Inbox</div>
-
-      <div id="items-container" class="items-container"></div>
-
-      <div id="empty-state" class="empty-state hidden">
-        <div class="empty-icon">◈</div>
-        <p id="empty-message">Nothing here yet.</p>
-        <p class="empty-hint">Press <kbd>N</kbd> or click <strong>+ Add</strong> to capture something.</p>
-      </div>
-    </main>
-  </div>
-
-  <!-- Add / Edit modal -->
-  <div id="modal-overlay" class="modal-overlay hidden">
-    <div class="modal">
-      <div class="modal-header">
-        <h2 id="modal-title">Add Interest</h2>
-        <button id="modal-close" class="btn-icon" aria-label="Close">×</button>
-      </div>
-      <form id="item-form" novalidate>
-        <div class="form-group">
-          <input type="text" id="form-title" placeholder="What are you interested in?" autocomplete="off" required>
+        <div class="form-row">
+          <label>アクセサリー</label>
+          <div id="accessory-select" class="chip-group"></div>
         </div>
-        <div class="form-group">
-          <div id="form-category" class="category-select"></div>
+        <div class="form-row">
+          <label>服装</label>
+          <div id="outfitStyle-select" class="chip-group"></div>
         </div>
-        <div class="form-group">
-          <input type="text" id="form-tags" placeholder="Tags, comma separated (e.g. books, design)" autocomplete="off">
-        </div>
-        <div class="form-group">
-          <textarea id="form-note" placeholder="Notes (optional)" rows="3"></textarea>
-        </div>
-        <div class="form-group priority-group">
-          <label>Priority</label>
-          <div class="priority-select">
-            <button type="button" class="priority-btn" data-priority="low">Low</button>
-            <button type="button" class="priority-btn active" data-priority="medium">Medium</button>
-            <button type="button" class="priority-btn" data-priority="high">High</button>
+        <div class="color-grid">
+          <div class="color-item">
+            <label for="c-hair">髪の色</label>
+            <input type="color" id="c-hair" value="#6b4f3a">
+          </div>
+          <div class="color-item">
+            <label for="c-eye">目の色</label>
+            <input type="color" id="c-eye" value="#4a6fa5">
+          </div>
+          <div class="color-item">
+            <label for="c-skin">肌の色</label>
+            <input type="color" id="c-skin" value="#ffe3cf">
+          </div>
+          <div class="color-item">
+            <label for="c-outfit">服の色</label>
+            <input type="color" id="c-outfit" value="#e8718d">
           </div>
         </div>
-        <div class="form-actions">
-          <button type="button" id="form-cancel" class="btn-secondary">Cancel</button>
-          <button type="submit" class="btn-primary">Save</button>
+      </div>
+
+      <div class="setup-nav">
+        <div></div>
+        <button class="btn-primary" id="step1-next">つぎへ →</button>
+      </div>
+    </div>
+
+    <!-- Step 2: 性格と話し方 -->
+    <div id="setup-step-2" class="setup-step">
+      <h2 class="setup-step-title">💬 性格と話し方</h2>
+
+      <div class="personality-grid" id="personality-grid"></div>
+
+      <div class="setup-form">
+        <div class="form-row">
+          <label for="s-firstPerson">一人称</label>
+          <input type="text" id="s-firstPerson" class="input-short" placeholder="わたし" maxlength="8">
         </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Random interest modal -->
-  <div id="random-overlay" class="modal-overlay hidden">
-    <div class="modal">
-      <div class="modal-header">
-        <h2>Something to explore</h2>
-        <button id="random-close" class="btn-icon" aria-label="Close">×</button>
+        <div class="form-row">
+          <label for="s-suffix">語尾（任意）</label>
+          <input type="text" id="s-suffix" class="input-short" placeholder="例: にゃ" maxlength="4">
+        </div>
       </div>
-      <div id="random-content"></div>
-      <div class="form-actions">
-        <button id="random-again" class="btn-secondary">⚄ Another</button>
-        <button id="random-done" class="btn-primary">Done</button>
+
+      <div class="setup-nav">
+        <button class="btn-secondary" id="step2-back">← もどる</button>
+        <button class="btn-primary" id="step2-next">つぎへ →</button>
       </div>
     </div>
-  </div>
 
-  <script src="app.js"></script>
+    <!-- Step 3: なまえ -->
+    <div id="setup-step-3" class="setup-step">
+      <h2 class="setup-step-title">💌 なまえをきめよう</h2>
+
+      <div class="setup-form">
+        <div class="form-row">
+          <label for="s-charName">キャラクターの名前</label>
+          <input type="text" id="s-charName" placeholder="ミナト" maxlength="12">
+        </div>
+        <div class="form-row">
+          <label for="s-playerName">あなたの名前</label>
+          <input type="text" id="s-playerName" placeholder="ぴな" maxlength="12">
+        </div>
+        <div class="form-row">
+          <label for="s-callName">キャラに呼ばれたい名前</label>
+          <input type="text" id="s-callName" placeholder="ぴな" maxlength="12">
+        </div>
+      </div>
+
+      <div class="setup-nav">
+        <button class="btn-secondary" id="step3-back">← もどる</button>
+        <button class="btn-primary" id="step3-finish">はじめる 🌸</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== メイン画面(タブ切替) ===================== -->
+<div id="screen-main" class="screen hidden">
+
+  <!-- メイン: FocusFlow (タスク管理) + お部屋 -->
+  <section id="tab-tasks" class="tab-section ffx">
+    <div class="ffx-embed" id="ffx-screen-main">
+      <div class="main-header">
+        <div class="app-title">FocusFlow</div>
+        <div class="date-badge" id="dateBadge"></div>
+        <div class="version-badge" id="versionBadge"></div>
+        <button class="ffx-add-btn" id="ffx-add-btn" onclick="FFX.openNewTask()" aria-label="タスクを追加">＋追加</button>
+      </div>
+
+      <div class="ffx-tabbar">
+        <button class="ffx-tabbtn active" id="tab-btn-home" onclick="FFX.switchTab('home')">タスク</button>
+        <button class="ffx-tabbtn" id="tab-btn-all" onclick="FFX.switchTab('all')">すべて</button>
+      </div>
+
+      <!-- HOME TAB (タスクダッシュボード) -->
+      <div class="tab-content visible" id="ffx-tab-home">
+        <div class="time-bar-wrap">
+          <div class="time-bar-label">
+            <span class="time-bar-remaining">今日の残り <strong id="timeBarRemaining">0.0</strong>h</span>
+            <span class="time-bar-total" id="timeBarTotal">/ 0.0h</span>
+          </div>
+          <div class="time-bar-track">
+            <div class="time-bar-fill" id="timeBarFill" style="width:0%"></div>
+          </div>
+        </div>
+        <div class="scroll">
+          <div class="group-rows" id="mainGroups"></div>
+        </div>
+      </div>
+
+      <!-- ALL TAB (タスク編集) -->
+      <div class="tab-content" id="tab-all">
+        <div id="timelineContainer" style="padding: 12px 20px 0; display:none;"></div>
+        <div style="display:flex;justify-content:flex-end;padding:8px 20px 4px;">
+          <button id="deleteModeBtn" onclick="FFX.toggleDeleteMode()"
+            style="border:1.5px solid var(--border-strong);background:none;font-size:14px;font-weight:700;cursor:pointer;padding:4px 12px;border-radius:50px;color:var(--text3);font-family:'Noto Sans JP',sans-serif;transition:all .15s;">削除</button>
+        </div>
+        <div class="scroll" id="allTasksScroll"></div>
+      </div>
+
+      <!-- ROOM TAB (いっしょぐらし: キャラとの生活) -->
+      <div class="tab-content" id="ffx-tab-room">
+        <div id="room-bg" class="room-bg">
+          <!-- 窓と家具の CSS 装飾 -->
+          <div class="room-window">
+            <div class="room-sky"></div>
+            <div class="room-curtain left"></div>
+            <div class="room-curtain right"></div>
+          </div>
+          <div class="room-floor"></div>
+          <div class="room-desk"></div>
+          <div class="room-shelf"></div>
+        </div>
+
+        <!-- ステータスバー -->
+        <div class="status-bar">
+          <div class="status-level">
+            <span id="home-level-icon">💛</span>
+            <span id="home-level-name"></span>
+          </div>
+          <div class="status-coins">
+            <span>🪙</span><span id="home-coins"></span>
+          </div>
+          <div class="status-streak">
+            <span>🔥</span><span id="home-streak"></span>
+          </div>
+        </div>
+
+        <!-- 立ち絵 + セリフポップアップ (立ち絵のすぐ下に出る) -->
+        <div class="chara-area">
+          <div class="chara-stage">
+            <div id="home-chara" class="home-chara-img" role="button" aria-label="キャラクターをタップ"></div>
+            <div id="home-bubble" class="speech-bubble hidden">
+              <p id="home-bubble-text"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- プレゼント -->
+  <section id="tab-shop" class="tab-section hidden">
+    <div class="page-header">
+      <h2 class="page-title">🎁 プレゼント</h2>
+      <div class="coin-display">🪙 <span id="shop-coins"></span></div>
+    </div>
+    <div id="gift-list" class="gift-grid"></div>
+  </section>
+
+  <!-- おでかけ -->
+  <section id="tab-date" class="tab-section hidden">
+    <div class="page-header">
+      <h2 class="page-title">🌸 おでかけ</h2>
+      <div class="coin-display">🪙 <span id="date-coins"></span></div>
+    </div>
+    <div id="date-spot-list" class="date-spot-list"></div>
+  </section>
+
+  <!-- きろく -->
+  <section id="tab-records" class="tab-section hidden">
+    <div class="page-header">
+      <h2 class="page-title">📖 きろく</h2>
+    </div>
+    <div class="records-content">
+      <div class="record-card affection-card">
+        <div class="record-label">しんみつど</div>
+        <div class="affection-level-name" id="rec-level-name"></div>
+        <div class="affection-bar-wrap">
+          <div class="affection-bar-bg">
+            <div id="rec-affection-bar" class="affection-bar-fill"></div>
+          </div>
+          <div class="affection-bar-labels">
+            <span id="rec-affection-cur"></span>
+            <span id="rec-affection-next"></span>
+          </div>
+        </div>
+      </div>
+      <div class="record-card params-card">
+        <div class="record-label">じぶんのパラメーター</div>
+        <div id="param-radar" class="param-radar"></div>
+        <div id="param-list" class="param-list"></div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-num" id="rec-total-tasks"></div>
+          <div class="stat-label">タスク完了</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="rec-total-coins"></div>
+          <div class="stat-label">獲得コイン</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="rec-total-gifts"></div>
+          <div class="stat-label">プレゼント</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="rec-total-dates"></div>
+          <div class="stat-label">おでかけ</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="rec-streak"></div>
+          <div class="stat-label">ストリーク🔥</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="rec-best-streak"></div>
+          <div class="stat-label">最高記録</div>
+        </div>
+      </div>
+      <div class="memories-section">
+        <h3 class="memories-title">💝 おもいで</h3>
+        <div id="memories-list" class="memories-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- せってい -->
+  <section id="tab-settings" class="tab-section hidden">
+    <div class="page-header">
+      <h2 class="page-title">⚙️ せってい</h2>
+    </div>
+    <div class="settings-content">
+      <div class="settings-section">
+        <h3 class="settings-section-title">キャラクター</h3>
+        <div id="roster-list" class="roster-list"></div>
+        <button class="btn-secondary roster-add-btn" id="roster-add-btn">＋ あたらしい子をつくる</button>
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title">キャラクターの見た目</h3>
+        <div id="settings-chara-preview" class="chara-preview small"></div>
+        <div class="setup-form">
+          <div class="form-row">
+            <label>髪型</label>
+            <div id="settings-hairStyle-select" class="chip-group"></div>
+          </div>
+          <div class="form-row">
+            <label>アクセサリー</label>
+            <div id="settings-accessory-select" class="chip-group"></div>
+          </div>
+          <div class="form-row">
+            <label>服装</label>
+            <div id="settings-outfit-select" class="chip-group"></div>
+          </div>
+          <div class="color-grid">
+            <div class="color-item">
+              <label for="s2-hair">髪の色</label>
+              <input type="color" id="s2-hair">
+            </div>
+            <div class="color-item">
+              <label for="s2-eye">目の色</label>
+              <input type="color" id="s2-eye">
+            </div>
+            <div class="color-item">
+              <label for="s2-skin">肌の色</label>
+              <input type="color" id="s2-skin">
+            </div>
+            <div class="color-item">
+              <label for="s2-outfit">服の色</label>
+              <input type="color" id="s2-outfit">
+            </div>
+          </div>
+          <div class="import-btn-row" style="margin-top:12px">
+            <button class="btn-secondary" id="settings-art-upload-btn">📷 画像から作る</button>
+            <button class="btn-secondary hidden" id="settings-art-revert-btn">↩️ パーツ編集に戻す</button>
+          </div>
+          <div id="expr-manager" class="expr-manager hidden">
+            <p class="import-desc" style="margin:12px 0 6px">表情さべつ（スロットをタップして画像を登録。場面に合わせて切り替わります）</p>
+            <div id="expr-grid" class="expr-grid"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title">性格と話し方</h3>
+        <div class="personality-grid small" id="settings-personality-grid"></div>
+        <div class="setup-form">
+          <div class="form-row">
+            <label for="s2-firstPerson">一人称</label>
+            <input type="text" id="s2-firstPerson" class="input-short" maxlength="8">
+          </div>
+          <div class="form-row">
+            <label for="s2-suffix">語尾（任意）</label>
+            <input type="text" id="s2-suffix" class="input-short" maxlength="4">
+          </div>
+        </div>
+        <button class="btn-secondary de-entry-btn" id="dialogue-editor-btn">📝 セリフを編集</button>
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title">なまえ</h3>
+        <div class="setup-form">
+          <div class="form-row">
+            <label for="s2-charName">キャラの名前</label>
+            <input type="text" id="s2-charName" maxlength="12">
+          </div>
+          <div class="form-row">
+            <label for="s2-playerName">あなたの名前</label>
+            <input type="text" id="s2-playerName" maxlength="12">
+          </div>
+          <div class="form-row">
+            <label for="s2-callName">呼ばれたい名前</label>
+            <input type="text" id="s2-callName" maxlength="12">
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-primary settings-save-btn" id="settings-save">保存する</button>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title">時間帯と挨拶</h3>
+        <p class="import-desc">挨拶が切り替わる時刻を変えたり、時間帯を追加できます。各時間帯の専用セリフは「セリフを編集」から書けます。</p>
+        <div id="timeslot-list" class="timeslot-list"></div>
+        <div class="import-btn-row" style="margin-top:8px">
+          <button class="btn-secondary" id="timeslot-add">＋ 時間帯を追加</button>
+          <button class="btn-secondary" id="timeslot-reset">標準に戻す</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title">チャットでキャラを作る</h3>
+        <p class="import-desc">AIチャットに相談用プロンプトを貼ってキャラクターを一緒に考え、出てきたJSONをインポートできます。</p>
+        <div class="import-btn-row">
+          <button class="btn-secondary" id="char-prompt-btn">📋 相談用プロンプト</button>
+          <button class="btn-primary" id="char-import-btn">📥 インポート</button>
+        </div>
+      </div>
+
+      <div class="settings-section danger-zone">
+        <h3 class="settings-section-title danger-title">⚠️ データリセット</h3>
+        <p class="danger-desc">すべてのデータが消えます。この操作は取り消せません。</p>
+        <button class="btn-danger" id="settings-reset">リセットする</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 下部タブバー (お部屋とゲーム要素の行き来) -->
+  <nav class="tab-bar">
+    <button class="tab-btn active" data-nav="room">お部屋</button>
+    <button class="tab-btn" data-nav="shop">プレゼント</button>
+    <button class="tab-btn" data-nav="date">おでかけ</button>
+    <button class="tab-btn" data-nav="records">きろく</button>
+    <button class="tab-btn" data-nav="settings">せってい</button>
+  </nav>
+</div>
+
+<!-- ===================== デートシーン (全画面VN) ===================== -->
+<div id="screen-date-vn" class="screen hidden">
+  <div id="vn-bg" class="vn-bg"></div>
+  <div class="vn-chara-wrap">
+    <div id="vn-chara" class="vn-chara"></div>
+  </div>
+  <div class="vn-ui" id="vn-ui" role="button" aria-label="クリックで次へ">
+    <div class="vn-textbox">
+      <div class="vn-speaker" id="vn-speaker"></div>
+      <div class="vn-text" id="vn-text"></div>
+      <div class="vn-next-hint">タップして次へ ▶</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== レベルアップ演出 ===================== -->
+<div id="levelup-overlay" class="levelup-overlay hidden">
+  <div class="levelup-box">
+    <div class="levelup-sparkle" aria-hidden="true">
+      <span>✨</span><span>⭐</span><span>✨</span>
+      <span>⭐</span><span>✨</span><span>⭐</span>
+    </div>
+    <div class="levelup-title">レベルアップ！</div>
+    <div class="levelup-name" id="levelup-name"></div>
+    <div id="levelup-chara" class="levelup-chara"></div>
+    <button class="btn-primary" id="levelup-ok">やったー！</button>
+  </div>
+</div>
+
+<!-- ===================== セリフエディタ ===================== -->
+<div id="dialogue-editor" class="de-overlay hidden">
+  <div class="de-header">
+    <button class="de-back-btn" id="de-back">‹</button>
+    <div class="de-title" id="de-title">セリフを編集</div>
+  </div>
+  <div class="de-body" id="de-list"></div>
+  <div class="de-footer" id="de-list-footer">
+    <button class="btn-secondary" id="de-prompt-btn">💬 相談プロンプト</button>
+    <button class="btn-primary" id="de-import-btn">📥 セリフをインポート</button>
+  </div>
+  <div class="de-body hidden" id="de-detail">
+    <p class="de-hint" id="de-hint"></p>
+    <div id="de-lines" class="de-lines"></div>
+    <div class="de-btn-row">
+      <button class="btn-secondary" id="de-add">＋ セリフを追加</button>
+      <button class="btn-secondary" id="de-copy">📋 標準からコピー</button>
+    </div>
+    <div class="de-preview-box">
+      <button class="btn-secondary" id="de-try">🎤 ためす</button>
+      <p id="de-preview" class="de-preview"></p>
+    </div>
+    <div class="de-actions">
+      <button class="btn-secondary" id="de-reset">標準に戻す</button>
+      <button class="btn-primary" id="de-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== デートシナリオエディタ ===================== -->
+<div id="date-editor" class="de-overlay hidden">
+  <div class="de-header">
+    <button class="de-back-btn" id="ded-back">‹</button>
+    <div class="de-title" id="ded-title">おでかけ先を編集</div>
+  </div>
+  <div class="de-body">
+    <div class="ded-grid">
+      <div class="form-row">
+        <label for="ded-name">なまえ</label>
+        <input type="text" id="ded-name" maxlength="12" placeholder="例: 星空の丘">
+      </div>
+      <div class="form-row ded-icon-row">
+        <label for="ded-icon">アイコン</label>
+        <input type="text" id="ded-icon" maxlength="4" placeholder="🌌">
+      </div>
+    </div>
+    <div class="ded-grid">
+      <div class="form-row">
+        <label for="ded-price">価格 (🪙)</label>
+        <input type="number" id="ded-price" min="0" max="9999" inputmode="numeric">
+      </div>
+      <div class="form-row">
+        <label for="ded-aff">ごほうび親密度 (💛)</label>
+        <input type="number" id="ded-aff" min="0" max="100" inputmode="numeric">
+      </div>
+    </div>
+    <div class="form-row">
+      <label>解放レベル</label>
+      <div id="ded-level-select" class="chip-group"></div>
+    </div>
+    <div class="form-row">
+      <label>背景</label>
+      <div id="ded-bg-select" class="chip-group"></div>
+    </div>
+    <div class="form-row">
+      <label>台本（上から順に再生。{user} = 呼び名 / {me} = 一人称）</label>
+      <div id="ded-beats" class="ded-beats"></div>
+      <button class="btn-secondary de-entry-btn" id="ded-add-beat">＋ セリフ/ナレーションを追加</button>
+    </div>
+    <div class="de-actions">
+      <button class="btn-secondary" id="ded-preview">▶ ためす</button>
+      <button class="btn-primary" id="ded-save">保存</button>
+    </div>
+    <button class="btn-danger de-entry-btn hidden" id="ded-delete"></button>
+  </div>
+</div>
+
+<!-- ===================== 確認ダイアログ ===================== -->
+<div id="confirm-overlay" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="confirm-title">確認</h3>
+    </div>
+    <p id="confirm-message" class="confirm-message"></p>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="confirm-cancel">キャンセル</button>
+      <button class="btn-danger" id="confirm-ok">リセット</button>
+    </div>
+  </div>
+</div>
+
+
+<input type="file" id="art-file-input" accept="image/*" class="hidden">
+
+<!-- ===================== キャラ相談プロンプト ===================== -->
+<div id="char-prompt-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>相談用プロンプト</h3>
+      <button class="btn-icon-close" id="char-prompt-close">✕</button>
+    </div>
+    <p class="import-desc">これをコピーしてAIチャットに貼り、キャラクターを相談してください。最後に出てくるJSONを「インポート」で取り込めます。</p>
+    <textarea id="char-prompt-text" class="import-textarea" readonly rows="9"></textarea>
+    <div class="modal-actions">
+      <button class="btn-primary" id="char-prompt-copy">コピーする</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== キャラインポート ===================== -->
+<div id="char-import-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>キャラクターをインポート</h3>
+      <button class="btn-icon-close" id="char-import-close">✕</button>
+    </div>
+    <textarea id="char-import-text" class="import-textarea" rows="6" placeholder="チャットで出力されたJSONをここに貼り付け"></textarea>
+    <p id="char-import-error" class="import-error hidden"></p>
+    <div id="char-import-preview" class="import-preview hidden">
+      <div id="char-import-preview-art" class="chara-preview small"></div>
+      <div class="import-preview-info">
+        <div id="char-import-preview-name" class="import-preview-name"></div>
+        <div id="char-import-preview-meta" class="import-preview-meta"></div>
+        <p id="char-import-preview-line" class="import-preview-line"></p>
+      </div>
+    </div>
+    <label class="import-overwrite-row">
+      <input type="checkbox" id="char-import-overwrite">
+      <span>いまの子を上書きする（チェックなしなら、いまの子は控えに保存されます）</span>
+    </label>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="char-import-cancel">キャンセル</button>
+      <button class="btn-primary" id="char-import-apply" disabled>この子をむかえる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 部分インポート (セリフ/デート台本) ===================== -->
+<div id="partial-import-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="pi-title">インポート</h3>
+      <button class="btn-icon-close" id="pi-close">✕</button>
+    </div>
+    <p class="import-desc" id="pi-desc"></p>
+    <textarea id="pi-text" class="import-textarea" rows="6" placeholder="AIチャットが出力したJSONをここに貼り付け"></textarea>
+    <p id="pi-error" class="import-error hidden"></p>
+    <p id="pi-summary" class="pi-summary hidden"></p>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="pi-cancel">キャンセル</button>
+      <button class="btn-primary" id="pi-apply" disabled>取り込む</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== FocusFlow サブ画面 (グループ/集中/編集) ===================== -->
+<div class="ffx" id="ffx-overlays">
+<div class="ffx-screen" id="ffx-screen-group">
+  <div class="screen-header">
+    <button class="back-btn" onclick="FFX.goBack('group')">‹</button>
+    <div class="header-title" id="groupHeaderTitle"></div>
+    <div class="header-sub" id="groupHeaderSub"></div>
+  </div>
+  <div class="scroll">
+    <div class="ffx-task-list" id="groupTaskList"></div>
+  </div>
+</div>
+
+<!-- ════ SCREEN: FOCUS ════ -->
+<div class="ffx-screen" id="ffx-screen-focus">
+  <div class="screen-header">
+    <button class="back-btn" onclick="FFX.goBack('focus')">‹</button>
+    <div class="header-title">集中モード</div>
+  </div>
+  <div class="focus-body">
+    <div class="focus-task-title" id="focusTaskTitle"></div>
+    <div class="focus-step-widget" id="focusStepWidget" style="display:none"></div>
+    <div class="timer-ring-wrap">
+      <div class="timer-ring" id="timerRing"></div>
+      <!-- ドットSVG：赤弧の先端(r=81、12時位置)に白ドットを置いて回転 -->
+      <svg class="timer-arrow-svg" viewBox="0 0 180 180">
+        <circle id="timerDot" cx="90" cy="9" r="6"
+                fill="white" stroke="#c0392b" stroke-width="2"/>
+      </svg>
+      <div class="timer-inner" onclick="FFX.toggleTimer()">
+        <div class="timer-display" id="timerDisplay">00:00</div>
+        <div class="timer-hint" id="timerHint">タップで開始</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ SCREEN: STEP DETAIL EDIT ════ -->
+<div class="ffx-screen" id="ffx-screen-step-edit" style="z-index:185;">
+  <div class="screen-header">
+    <button class="back-btn" onclick="FFX.closeStepDetail()">‹</button>
+    <div class="header-title">ステップを編集</div>
+  </div>
+  <div class="scroll" style="padding: 24px 20px 0;">
+    <div class="edit-section-label">内容</div>
+    <textarea class="step-detail-text" id="stepDetailText" placeholder="ステップの内容を入力"></textarea>
+    <div class="step-detail-mins-wrap">
+      <span class="step-detail-mins-label">推定</span>
+      <input class="step-detail-mins" id="stepDetailMins" inputmode="numeric" placeholder="0">
+      <span class="step-detail-mins-label">分</span>
+    </div>
+    <div class="edit-save-sticky">
+      <button class="edit-save-btn" onclick="FFX.saveStepDetail()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ════ ACTION SHEET ════ -->
+<div class="action-overlay" id="actionOverlay" onclick="FFX.closeActionSheet()">
+  <div class="action-sheet" onclick="event.stopPropagation()">
+    <div class="action-sheet-handle"></div>
+    <div class="action-sheet-title" id="actionTitle"></div>
+    <button class="action-btn" onclick="FFX.actionEdit()">✏️ 編集</button>
+    <div class="action-section-label">優先度</div>
+    <div class="action-urgency-row">
+      <button class="action-urgency-btn" id="aub-must" onclick="FFX.actionSetUrgency('must')">今日中に絶対</button>
+      <button class="action-urgency-btn" id="aub-want" onclick="FFX.actionSetUrgency('want')">できたら</button>
+      <button class="action-urgency-btn" id="aub-nice" onclick="FFX.actionSetUrgency('nice')">余力があれば</button>
+      <button class="action-urgency-btn" id="aub-scheduled" onclick="FFX.actionSetUrgency('scheduled')">後日実行予定</button>
+    </div>
+    <button class="action-btn danger" onclick="FFX.actionDelete()">🗑 削除</button>
+    <button class="action-cancel" onclick="FFX.closeActionSheet()">キャンセル</button>
+  </div>
+</div>
+
+<!-- ════ SCREEN: EDIT ════ -->
+<div class="ffx-screen" id="ffx-screen-edit" style="z-index:175;">
+  <div class="screen-header">
+    <button class="back-btn" onclick="FFX.closeEditScreen()">‹</button>
+    <div class="header-title">タスクを編集</div>
+  </div>
+  <div class="scroll" id="editScroll">
+    <div class="edit-section">
+      <div class="edit-section-label">タイトル</div>
+      <input class="edit-title-input" id="editTaskTitle" placeholder="タスクのタイトル">
+    </div>
+    <div class="edit-section" style="margin-top:16px;">
+      <div class="edit-section-label">期日（任意）</div>
+      <input class="edit-due-input" id="editDueDate" type="date">
+    </div>
+    <div class="edit-section" style="margin-top:16px;">
+      <div class="edit-section-label">実行日（後日実行予定の場合）</div>
+      <input class="edit-due-input" id="editScheduledDate" type="date">
+    </div>
+    <div class="edit-section" style="margin-top:16px;">
+      <div class="edit-section-label">カテゴリ（完了で上がるパラメーター）</div>
+      <div class="ffx-cat-row" id="editCategoryRow"></div>
+    </div>
+    <div class="edit-section" style="margin-top:20px;">
+      <div class="edit-section-label">ステップ</div>
+      <button class="add-step-btn" onclick="FFX.addEditStep()" style="margin-bottom:8px;">＋ ステップを追加</button>
+      <div class="step-edit-list" id="stepEditList"></div>
+    </div>
+    <div class="edit-save-sticky">
+      <button class="edit-save-btn" onclick="FFX.saveEdit()">保存</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<script src="js/character.js"></script>
+<script src="js/gamedata.js"></script>
+<script src="js/dialogue.js"></script>
+<script src="js/focusflow.js"></script>
+<script src="js/core.js"></script>
+<script src="js/art.js"></script>
+<script src="js/rewards.js"></script>
+<script src="js/home.js"></script>
+<script src="js/shopdate.js"></script>
+<script src="js/editors.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/main.js"></script>
 </body>
 </html>
