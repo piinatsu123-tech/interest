@@ -1023,10 +1023,9 @@ function applyCharImport() {
   saveState();
 
   closeCharImportModal();
-  renderChara('home-chara', 'smile');
   initSettingsTab();
   showToast(`💞 ${ch.name}が来ました`);
+  openRoom();
   const speech = getSpeech('setup_first');
-  showBubble(speech);
-  switchTab('home');
+  showBubble(speech, 'smile');
 }

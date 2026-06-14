@@ -2,45 +2,21 @@
 
 /* main.js — タブ切替・イベント登録・起動 */
 
-// ─── タブ切替 ────────────────────────────────────────────────
-let currentTab = 'home';
+// ─── 画面切替 ────────────────────────────────────────────────
+// メインは FocusFlow (#tab-tasks)。お部屋はその中の room タブ。
+// プレゼント/おでかけ/きろく/せってい はお部屋ハブから開くサブ画面。
+let currentTab = 'tasks';
 
 function switchTab(tabName) {
   currentTab = tabName;
 
-  // タブセクション
+  // タブセクション (#tab-tasks / #tab-shop / #tab-date / #tab-records / #tab-settings)
   document.querySelectorAll('.tab-section').forEach(s => {
     s.classList.toggle('hidden', s.id !== `tab-${tabName}`);
   });
 
-  // タブボタン
-  document.querySelectorAll('.tab-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.tab === tabName);
-  });
-
-  // タスクタブ表示中は下部タブバーを隠す
-  const tabBar = document.querySelector('.tab-bar');
-  if (tabBar) tabBar.classList.toggle('hidden', tabName === 'tasks');
-
-  // タブごとの更新
-  if (tabName === 'home') {
-    refreshStatusBar();
-    refreshHomeLauncher();
-    // 時間帯の変化を反映 (背景は常に、挨拶はスロットが変わったときだけ)
-    const slot = currentTimeSlot();
-    const roomBg = document.getElementById('room-bg');
-    if (roomBg) roomBg.className = `room-bg time-${slot.base}`;
-    if (_lastGreetSlotId !== null && _lastGreetSlotId !== slot.id) {
-      _lastGreetSlotId = slot.id;
-      _homeRestExpr = getDefaultExpression();
-      renderChara('home-chara', _homeRestExpr);
-      showBubble(getSpeech(getGreetingSituation()));
-    } else if (hasExpressionVariants()) {
-      // 表情差分があるキャラは、ホームに来るたび休憩中の顔を入れ替える (固定回避)
-      _homeRestExpr = getDefaultExpression();
-      renderChara('home-chara', _homeRestExpr);
-    }
-  } else if (tabName === 'tasks') {
+  // 画面ごとの更新
+  if (tabName === 'tasks') {
     if (window.FFX) FFX.renderMain();
   } else if (tabName === 'shop') {
     renderShop();
@@ -53,14 +29,47 @@ function switchTab(tabName) {
   }
 }
 
+/** お部屋 (いっしょぐらし) を開く: FocusFlow を出して room タブにする */
+function openRoom() {
+  switchTab('tasks');
+  if (window.FFX) FFX.switchTab('room');
+}
+
+/** お部屋タブが今表示されているか */
+function isRoomVisible() {
+  const tasks = document.getElementById('tab-tasks');
+  const room = document.getElementById('ffx-tab-room');
+  return !!(tasks && !tasks.classList.contains('hidden')
+    && room && room.classList.contains('visible'));
+}
+
+/** お部屋タブに入ったときの描画と挨拶 (FFX.switchTab('room') から呼ばれる) */
+function enterRoom() {
+  refreshStatusBar();
+  // 時間帯の背景 (背景は常に更新、挨拶はスロットが変わったときだけ)
+  const slot = currentTimeSlot();
+  const roomBg = document.getElementById('room-bg');
+  if (roomBg) roomBg.className = `room-bg time-${slot.base}`;
+  if (_lastGreetSlotId !== null && _lastGreetSlotId !== slot.id) {
+    _lastGreetSlotId = slot.id;
+    _homeRestExpr = getDefaultExpression();
+    renderChara('home-chara', _homeRestExpr);
+    showBubble(getSpeech(getGreetingSituation()));
+  } else if (hasExpressionVariants()) {
+    // 表情差分があるキャラは、お部屋に来るたび休憩中の顔を入れ替える (固定回避)
+    _homeRestExpr = getDefaultExpression();
+    renderChara('home-chara', _homeRestExpr);
+  }
+}
+
 // ─── イベント登録 ────────────────────────────────────────────
 function bindEvents() {
-  // タブバー
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  // お部屋ハブ: ゲーム要素への入口
+  document.querySelectorAll('.room-hub-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.room));
   });
 
-  // ホーム：立ち絵クリック
+  // お部屋：立ち絵クリック
   const homeChara = document.getElementById('home-chara');
   if (homeChara) {
     homeChara.addEventListener('click', () => {
@@ -69,10 +78,6 @@ function bindEvents() {
       showBubble(speech, homeIdleExpression());
     });
   }
-
-  // ホーム：大きめタスクランチャー
-  const homeTaskLauncher = document.getElementById('home-task-launcher');
-  if (homeTaskLauncher) homeTaskLauncher.addEventListener('click', () => switchTab('tasks'));
 
   // デート VN: クリックで進む
   const vnUI = document.getElementById('vn-ui');
@@ -193,11 +198,12 @@ function bindEvents() {
     if (document.visibilityState === 'visible' && isSetupDone()) {
       const wasAway = doRollover();
       if (wasAway) {
+        // 久しぶりはお部屋を開いて「おかえり」を見せる
+        openRoom();
         renderHome(true);
       }
       // FocusFlow 側での完了を検知
       ffCheckExternalCompletions();
-      refreshHomeLauncher();
     }
   });
 
@@ -248,7 +254,18 @@ function init() {
     document.getElementById('screen-setup').classList.add('hidden');
     document.getElementById('screen-main').classList.remove('hidden');
 
-    renderHome(wasAway);
+    // お部屋の状態を用意 (背景・立ち絵・休憩中の表情)
+    prepareRoom();
+
+    if (wasAway) {
+      // 久しぶりはお部屋を開いて「おかえり」を見せる
+      openRoom();
+      renderHome(true);
+    } else {
+      // 通常起動は FocusFlow のタスクダッシュボードから
+      switchTab('tasks');
+      if (window.FFX) FFX.switchTab('home');
+    }
 
     // 見切れているカスタム立ち絵を修復 (旧サニタイザーの viewBox 強制の救済)
     repairCustomArtViewBox();
@@ -289,9 +306,11 @@ if (document.readyState === 'loading') {
   init();
 }
 
-// グローバル公開 (任意)
+// グローバル公開
 window.App = {
-  state, saveState, switchTab,
+  state, saveState, switchTab, openRoom, isRoomVisible,
+  // FFX (focusflow.js) の room タブ切替時に呼ばれる
+  enterRoom: enterRoom,
   // FFX (focusflow.js) の save() から毎回呼ばれる
   onTasksChanged: function () { ffCheckExternalCompletions(); }
 };

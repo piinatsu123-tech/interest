@@ -71,14 +71,12 @@ function buyGift(giftId) {
 
   saveState();
 
-  // UI 更新
-  showBubble(text, lineExpr || (Math.random() < 0.5 ? 'joy' : 'blush'));
-  showToast(`${gift.icon} ${gift.name}をプレゼント！`);
+  // UI 更新: お部屋に戻ってリアクション
   renderShop();
   refreshStatusBar();
-
-  // ホームに戻る
-  switchTab('home');
+  showToast(`${gift.icon} ${gift.name}をプレゼント！`);
+  openRoom();
+  showBubble(text, lineExpr || (Math.random() < 0.5 ? 'joy' : 'blush'));
 }
 
 // ─── おでかけ (デートスポット一覧) ──────────────────────────────
@@ -472,8 +470,8 @@ function endDate() {
   document.getElementById('screen-date-vn').classList.add('hidden');
   document.getElementById('screen-main').classList.remove('hidden');
 
-  // ホームに戻ってリアクション
-  switchTab('home');
+  // お部屋に戻ってリアクション
+  openRoom();
   renderChara('home-chara', 'joy');
   const speech = getSpeech('greeting_day');
   showBubble(speech);

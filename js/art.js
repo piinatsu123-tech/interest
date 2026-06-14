@@ -444,8 +444,8 @@ function saveSettings() {
   state.character.look.outfitColor = get('s2-outfit') || state.character.look.outfitColor;
 
   saveState();
+  openRoom();
   renderChara('home-chara', 'smile');
   showBubble('設定を更新したよ！');
   showToast('設定を保存しました ✓');
-  switchTab('home');
 }

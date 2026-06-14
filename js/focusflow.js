@@ -531,9 +531,17 @@ function switchTab(tab) {
   currentTab = tab;
   document.getElementById('ffx-tab-home').classList.toggle('visible', tab === 'home');
   document.getElementById('tab-all').classList.toggle('visible', tab === 'all');
+  const roomPanel = document.getElementById('ffx-tab-room');
+  if (roomPanel) roomPanel.classList.toggle('visible', tab === 'room');
   document.getElementById('tab-btn-home').classList.toggle('active', tab === 'home');
   document.getElementById('tab-btn-all').classList.toggle('active', tab === 'all');
+  const roomBtn = document.getElementById('tab-btn-room');
+  if (roomBtn) roomBtn.classList.toggle('active', tab === 'room');
+  // お部屋では＋追加ボタンを隠す (タスク管理用なので)
+  const addBtn = document.getElementById('ffx-add-btn');
+  if (addBtn) addBtn.style.display = (tab === 'room') ? 'none' : '';
   if (tab === 'all') renderAllTasks();
+  if (tab === 'room' && window.App && App.enterRoom) App.enterRoom();
 }
 
 // ─── ALL TASKS VIEW ───────────────────────────────────────────────

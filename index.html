@@ -131,69 +131,23 @@
 <!-- ===================== メイン画面(タブ切替) ===================== -->
 <div id="screen-main" class="screen hidden">
 
-  <!-- ホーム -->
-  <section id="tab-home" class="tab-section">
-    <div id="room-bg" class="room-bg">
-      <!-- 窓と家具の CSS 装飾 -->
-      <div class="room-window">
-        <div class="room-sky"></div>
-        <div class="room-curtain left"></div>
-        <div class="room-curtain right"></div>
-      </div>
-      <div class="room-floor"></div>
-      <div class="room-desk"></div>
-      <div class="room-shelf"></div>
-    </div>
-
-    <!-- ステータスバー -->
-    <div class="status-bar">
-      <div class="status-level">
-        <span id="home-level-icon">💛</span>
-        <span id="home-level-name"></span>
-      </div>
-      <div class="status-coins">
-        <span>🪙</span><span id="home-coins"></span>
-      </div>
-      <div class="status-streak">
-        <span>🔥</span><span id="home-streak"></span>
-      </div>
-    </div>
-
-    <!-- 立ち絵 + セリフポップアップ -->
-    <div class="chara-area">
-      <div id="home-bubble" class="speech-bubble hidden">
-        <p id="home-bubble-text"></p>
-      </div>
-      <div id="home-chara" class="home-chara-img" role="button" aria-label="キャラクターをタップ"></div>
-    </div>
-
-    <!-- 大きめタスクランチャー -->
-    <button id="home-task-launcher" class="home-task-launcher" aria-label="タスクを開く">
-      <span class="launcher-icon">📋</span>
-      <span class="launcher-text">
-        <span class="launcher-title">タスク</span>
-        <span class="launcher-sub" id="home-task-summary"></span>
-      </span>
-      <span class="launcher-arrow">›</span>
-    </button>
-  </section>
-
-  <!-- タスク (FocusFlow) -->
-  <section id="tab-tasks" class="tab-section ffx hidden">
+  <!-- メイン: FocusFlow (タスク管理) + お部屋 -->
+  <section id="tab-tasks" class="tab-section ffx">
     <div class="ffx-embed" id="ffx-screen-main">
       <div class="main-header">
         <div class="app-title">FocusFlow</div>
         <div class="date-badge" id="dateBadge"></div>
         <div class="version-badge" id="versionBadge"></div>
-        <button class="ffx-add-btn" onclick="FFX.openNewTask()" aria-label="タスクを追加">＋追加</button>
+        <button class="ffx-add-btn" id="ffx-add-btn" onclick="FFX.openNewTask()" aria-label="タスクを追加">＋追加</button>
       </div>
 
       <div class="ffx-tabbar">
         <button class="ffx-tabbtn active" id="tab-btn-home" onclick="FFX.switchTab('home')">ホーム</button>
         <button class="ffx-tabbtn" id="tab-btn-all" onclick="FFX.switchTab('all')">すべて</button>
+        <button class="ffx-tabbtn" id="tab-btn-room" onclick="FFX.switchTab('room')">お部屋</button>
       </div>
 
-      <!-- HOME TAB -->
+      <!-- HOME TAB (タスクダッシュボード) -->
       <div class="tab-content visible" id="ffx-tab-home">
         <div class="time-bar-wrap">
           <div class="time-bar-label">
@@ -209,7 +163,7 @@
         </div>
       </div>
 
-      <!-- ALL TAB -->
+      <!-- ALL TAB (タスク編集) -->
       <div class="tab-content" id="tab-all">
         <div id="timelineContainer" style="padding: 12px 20px 0; display:none;"></div>
         <div style="display:flex;justify-content:flex-end;padding:8px 20px 4px;">
@@ -218,12 +172,70 @@
         </div>
         <div class="scroll" id="allTasksScroll"></div>
       </div>
+
+      <!-- ROOM TAB (いっしょぐらし: キャラとの生活) -->
+      <div class="tab-content" id="ffx-tab-room">
+        <div id="room-bg" class="room-bg">
+          <!-- 窓と家具の CSS 装飾 -->
+          <div class="room-window">
+            <div class="room-sky"></div>
+            <div class="room-curtain left"></div>
+            <div class="room-curtain right"></div>
+          </div>
+          <div class="room-floor"></div>
+          <div class="room-desk"></div>
+          <div class="room-shelf"></div>
+        </div>
+
+        <!-- ステータスバー -->
+        <div class="status-bar">
+          <div class="status-level">
+            <span id="home-level-icon">💛</span>
+            <span id="home-level-name"></span>
+          </div>
+          <div class="status-coins">
+            <span>🪙</span><span id="home-coins"></span>
+          </div>
+          <div class="status-streak">
+            <span>🔥</span><span id="home-streak"></span>
+          </div>
+        </div>
+
+        <!-- 立ち絵 + セリフポップアップ -->
+        <div class="chara-area">
+          <div id="home-bubble" class="speech-bubble hidden">
+            <p id="home-bubble-text"></p>
+          </div>
+          <div id="home-chara" class="home-chara-img" role="button" aria-label="キャラクターをタップ"></div>
+        </div>
+
+        <!-- ハブメニュー (ゲーム要素への入口) -->
+        <nav class="room-hub">
+          <button class="room-hub-btn" data-room="shop">
+            <span class="rh-icon">🎁</span>
+            <span class="rh-label">プレゼント</span>
+          </button>
+          <button class="room-hub-btn" data-room="date">
+            <span class="rh-icon">🌸</span>
+            <span class="rh-label">おでかけ</span>
+          </button>
+          <button class="room-hub-btn" data-room="records">
+            <span class="rh-icon">📖</span>
+            <span class="rh-label">きろく</span>
+          </button>
+          <button class="room-hub-btn" data-room="settings">
+            <span class="rh-icon">⚙️</span>
+            <span class="rh-label">せってい</span>
+          </button>
+        </nav>
+      </div>
     </div>
   </section>
 
   <!-- プレゼント -->
   <section id="tab-shop" class="tab-section hidden">
     <div class="page-header">
+      <button class="page-back-btn" onclick="App.openRoom()" aria-label="お部屋にもどる">‹</button>
       <h2 class="page-title">🎁 プレゼント</h2>
       <div class="coin-display">🪙 <span id="shop-coins"></span></div>
     </div>
@@ -233,6 +245,7 @@
   <!-- おでかけ -->
   <section id="tab-date" class="tab-section hidden">
     <div class="page-header">
+      <button class="page-back-btn" onclick="App.openRoom()" aria-label="お部屋にもどる">‹</button>
       <h2 class="page-title">🌸 おでかけ</h2>
       <div class="coin-display">🪙 <span id="date-coins"></span></div>
     </div>
@@ -242,6 +255,7 @@
   <!-- きろく -->
   <section id="tab-records" class="tab-section hidden">
     <div class="page-header">
+      <button class="page-back-btn" onclick="App.openRoom()" aria-label="お部屋にもどる">‹</button>
       <h2 class="page-title">📖 きろく</h2>
     </div>
     <div class="records-content">
@@ -299,6 +313,7 @@
   <!-- せってい -->
   <section id="tab-settings" class="tab-section hidden">
     <div class="page-header">
+      <button class="page-back-btn" onclick="App.openRoom()" aria-label="お部屋にもどる">‹</button>
       <h2 class="page-title">⚙️ せってい</h2>
     </div>
     <div class="settings-content">
@@ -415,15 +430,6 @@
       </div>
     </div>
   </section>
-
-  <!-- 下部タブバー -->
-  <nav class="tab-bar">
-    <button class="tab-btn active" data-tab="home">ホーム</button>
-    <button class="tab-btn" data-tab="shop">ショップ</button>
-    <button class="tab-btn" data-tab="date">おでかけ</button>
-    <button class="tab-btn" data-tab="records">きろく</button>
-    <button class="tab-btn" data-tab="settings">せってい</button>
-  </nav>
 </div>
 
 <!-- ===================== デートシーン (全画面VN) ===================== -->

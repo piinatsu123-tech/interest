@@ -44,20 +44,20 @@ function showBubble(speech, fallbackExpr) {
   }, BUBBLE_DURATION);
 }
 
-// ─── ホーム画面 ───────────────────────────────────────────────
-function renderHome(comeback) {
-  // 部屋背景
+// ─── お部屋 ───────────────────────────────────────────────────
+/** お部屋の状態を用意する (背景・ステータスバー・休憩中の表情)。セリフは出さない */
+function prepareRoom() {
   const roomBg = document.getElementById('room-bg');
-  if (roomBg) {
-    roomBg.className = `room-bg time-${getTimeSlot()}`;
-  }
-
-  // ステータスバー
+  if (roomBg) roomBg.className = `room-bg time-${getTimeSlot()}`;
   refreshStatusBar();
-
   // 立ち絵 (休憩中の顔。ポップアップが消えたらここへ戻す)
   _homeRestExpr = getDefaultExpression();
   renderChara('home-chara', _homeRestExpr);
+}
+
+/** お部屋を描画してセリフを出す (久しぶり・セットアップ直後・ロールオーバー時) */
+function renderHome(comeback) {
+  prepareRoom();
 
   // セリフ
   let situation;
@@ -82,9 +82,6 @@ function renderHome(comeback) {
   _lastBubbleText = speech.text;
   showBubble(speech);
   _lastGreetSlotId = currentTimeSlot().id;
-
-  // タスクランチャーの残数
-  refreshHomeLauncher();
 }
 
 function refreshStatusBar() {
@@ -97,16 +94,6 @@ function refreshStatusBar() {
   }
   if (coinEl) coinEl.textContent = state.coins;
   if (strEl)  strEl.textContent  = state.streak.current;
-}
-
-/** タスクランチャーの残数サマリーを更新 */
-function refreshHomeLauncher() {
-  const el = document.getElementById('home-task-summary');
-  if (!el) return;
-  const remaining = ffActiveTasks().filter(t => !t.done).length;
-  el.textContent = remaining === 0
-    ? '今日のタスクは全部おわり！'
-    : `のこり ${remaining} 件`;
 }
 
 // ─── きろく ──────────────────────────────────────────────────

@@ -83,8 +83,8 @@ function switchToCharacter(id) {
   showToast(`💞 ${state.character.name}と交代しました`);
   // 久しぶり感のある挨拶 (親密度 0 なら初対面の挨拶)
   const speech = getSpeech(state.affection === 0 ? 'setup_first' : 'comeback');
+  openRoom();
   showBubble(speech);
-  switchTab('home');
 }
 
 function deleteRosterCharacter(id) {
@@ -150,8 +150,8 @@ function renderTimeSlotList() {
   const commit = () => {
     saveState();
     renderTimeSlotList();
-    // ホームの背景・挨拶に即反映
-    if (currentTab === 'home') renderHome(false);
+    // お部屋を開いていれば背景・挨拶に即反映
+    if (typeof isRoomVisible === 'function' && isRoomVisible()) renderHome(false);
   };
   el.querySelectorAll('.timeslot-row').forEach(row => {
     const slot = state.timeSlots.find(t => t.id === row.dataset.id);
@@ -400,17 +400,17 @@ function finishSetup() {
 
   saveState();
 
-  // セットアップ画面を隠してメインを表示
+  // セットアップ画面を隠してメインを表示。初対面はお部屋で出迎える
   document.getElementById('screen-setup').classList.add('hidden');
   document.getElementById('screen-main').classList.remove('hidden');
 
-  renderHome(false);
+  prepareRoom();
+  openRoom();
 
   // setup_first セリフ
   setTimeout(() => {
     const speech = getSpeech('setup_first');
-    showBubble(speech);
-    renderChara('home-chara', 'smile');
+    showBubble(speech, 'smile');
   }, 300);
 }
 
