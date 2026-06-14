@@ -43,7 +43,7 @@
 
   /* レイアウト */
   --max-w: 480px;
-  --tab-h: 64px;
+  --tab-h: 80px;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -425,6 +425,8 @@ input[type="color"] {
   box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.04);
   z-index: 100;
 }
+/* FocusFlow(タスク/すべて)表示中は下部バーを隠す */
+.tab-bar.hidden { display: none !important; }
 .tab-btn {
   flex: 1;
   display: flex;
@@ -432,32 +434,17 @@ input[type="color"] {
   justify-content: center;
   border: none;
   background: none;
-  padding: 6px 2px;
-  font-size: 12px;
-  font-weight: 600;
+  padding: 8px 2px;
+  font-size: 14px;
+  font-weight: 700;
   font-family: 'Noto Sans JP', sans-serif;
+  white-space: nowrap;
+  letter-spacing: -0.3px;
   transition: color 0.18s;
   color: var(--text-muted);
 }
 .tab-btn:hover { color: var(--accent); }
 .tab-btn.active { color: var(--accent); }
-
-/* コンパクト表示: FocusFlow(タスク/すべて)では「お部屋」へ行く 1 ボタンだけ */
-.tab-bar.compact {
-  align-items: center;
-  padding: 0 16px;
-}
-.tab-bar.compact .tab-btn:not([data-nav="room"]) { display: none; }
-.tab-bar.compact .tab-btn[data-nav="room"] {
-  height: 44px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 14px;
-  font-weight: 700;
-  box-shadow: var(--shadow-sm);
-}
-.tab-bar.compact .tab-btn[data-nav="room"]:hover { color: #fff; }
 
 /* =========================================================
    タブセクション 共通
@@ -472,6 +459,8 @@ input[type="color"] {
   flex-direction: column;
 }
 .tab-section.hidden { display: none !important; }
+/* タスク/すべて表示中は下部バーが無いので最下部まで使う */
+#tab-tasks.fullheight { bottom: 0; }
 
 .page-header {
   display: flex;
@@ -622,31 +611,33 @@ input[type="color"] {
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.82);
+  gap: 16px;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.86);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border);
 }
 .status-level, .status-coins, .status-streak {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 13px;
-  font-weight: 700;
+  gap: 6px;
+  font-size: 18px;
+  font-weight: 800;
   color: var(--text);
 }
 .status-level { flex: 1; }
 .status-coins, .status-streak { flex-shrink: 0; }
 
-/* キャラエリア */
+/* キャラエリア (立ち絵の下にセリフ) */
 .chara-area {
   position: relative;
   z-index: 5;
   flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 10px;
   min-height: 0;
   padding: 12px;
 }
@@ -661,19 +652,17 @@ input[type="color"] {
 .home-chara-img:active { transform: scale(0.98); }
 .home-chara-img svg { width: 100%; height: 100%; }
 
-/* セリフポップアップ — 部屋の下(ランチャーのすぐ上)に出て、しばらくで消える */
+/* セリフポップアップ — 立ち絵のすぐ下に中央表示、しばらくで消える */
 .speech-bubble {
-  position: absolute;
+  position: relative;
   z-index: 10;
-  bottom: 8px;
-  left: 16px;
-  right: 16px;
+  width: calc(100% - 24px);
+  max-width: 380px;
   margin: 0 auto;
-  max-width: 340px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  padding: 14px 18px;
+  border-radius: var(--r-lg);
+  padding: 16px 20px;
   box-shadow: var(--shadow-md);
   text-align: center;
   animation: bubble-pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
@@ -700,8 +689,9 @@ input[type="color"] {
   border-bottom-color: var(--border);
 }
 #home-bubble-text {
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1.7;
+  font-weight: 500;
   color: var(--text);
   text-align: center;
 }

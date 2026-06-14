@@ -52,7 +52,7 @@ function isRoomVisible() {
 
 /**
  * 下部ナビの見せ方を現在の画面に合わせて更新する。
- * FocusFlow のタスク/すべて表示中はコンパクト (「お部屋」へ行く 1 ボタン)、
+ * FocusFlow のタスク/すべて表示中は下部バーを隠し画面を最下部まで使う。
  * お部屋・ゲーム各画面ではフルの 5 タブを出す。
  */
 function refreshBottomNav() {
@@ -60,9 +60,11 @@ function refreshBottomNav() {
   if (!bar) return;
   const ffxTab = (window.FFX && FFX.getCurrentTab) ? FFX.getCurrentTab() : 'home';
   const inTaskView = (currentTab === 'tasks') && (ffxTab !== 'room');
-  bar.classList.toggle('compact', inTaskView);
+  bar.classList.toggle('hidden', inTaskView);
+  const tasksSec = document.getElementById('tab-tasks');
+  if (tasksSec) tasksSec.classList.toggle('fullheight', inTaskView);
   // フル表示時のアクティブ (tasks セクション = お部屋扱い)
-  const navKey = inTaskView ? null : (currentTab === 'tasks' ? 'room' : currentTab);
+  const navKey = (currentTab === 'tasks') ? 'room' : currentTab;
   bar.querySelectorAll('.tab-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.nav === navKey);
   });

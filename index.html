@@ -144,6 +144,7 @@
       <div class="ffx-tabbar">
         <button class="ffx-tabbtn active" id="tab-btn-home" onclick="FFX.switchTab('home')">タスク</button>
         <button class="ffx-tabbtn" id="tab-btn-all" onclick="FFX.switchTab('all')">すべて</button>
+        <button class="ffx-tabbtn" id="tab-btn-room" onclick="FFX.switchTab('room')">お部屋</button>
       </div>
 
       <!-- HOME TAB (タスクダッシュボード) -->
@@ -200,12 +201,12 @@
           </div>
         </div>
 
-        <!-- 立ち絵 + セリフポップアップ -->
+        <!-- 立ち絵 + セリフポップアップ (立ち絵のすぐ下に出る) -->
         <div class="chara-area">
+          <div id="home-chara" class="home-chara-img" role="button" aria-label="キャラクターをタップ"></div>
           <div id="home-bubble" class="speech-bubble hidden">
             <p id="home-bubble-text"></p>
           </div>
-          <div id="home-chara" class="home-chara-img" role="button" aria-label="キャラクターをタップ"></div>
         </div>
       </div>
     </div>
