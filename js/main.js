@@ -70,22 +70,10 @@ function refreshBottomNav() {
 }
 
 /** お部屋タブに入ったときの描画と挨拶 (FFX.switchTab('room') から呼ばれる) */
+/** お部屋タブに入ったときの描画と挨拶 (FFX.switchTab('room') から呼ばれる)。
+    開くたびに必ずセリフを出す: 夕方以降にタスクが残っていれば督促、そうでなければ時間帯の挨拶。 */
 function enterRoom() {
-  refreshStatusBar();
-  // 時間帯の背景 (背景は常に更新、挨拶はスロットが変わったときだけ)
-  const slot = currentTimeSlot();
-  const roomBg = document.getElementById('room-bg');
-  if (roomBg) roomBg.className = `room-bg time-${slot.base}`;
-  if (_lastGreetSlotId !== null && _lastGreetSlotId !== slot.id) {
-    _lastGreetSlotId = slot.id;
-    _homeRestExpr = getDefaultExpression();
-    renderChara('home-chara', _homeRestExpr);
-    showBubble(getSpeech(getGreetingSituation()));
-  } else if (hasExpressionVariants()) {
-    // 表情差分があるキャラは、お部屋に来るたび休憩中の顔を入れ替える (固定回避)
-    _homeRestExpr = getDefaultExpression();
-    renderChara('home-chara', _homeRestExpr);
-  }
+  renderHome(false);
 }
 
 // ─── イベント登録 ────────────────────────────────────────────
