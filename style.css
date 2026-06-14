@@ -447,6 +447,14 @@ input[type="color"] {
 .tab-btn:hover { color: var(--text); }
 .tab-btn.active { color: var(--text); border-top-color: var(--text); }
 
+/* FocusFlow(タスク/すべて)表示中は、お部屋へ行く 1 タブだけ (タスク/すべてと同じトーン) */
+.tab-bar.compact .tab-btn:not([data-nav="room"]) { display: none; }
+.tab-bar.compact .tab-btn[data-nav="room"] {
+  color: var(--text);
+  font-weight: 700;
+  border-top-color: transparent;
+}
+
 /* =========================================================
    タブセクション 共通
    ========================================================= */
