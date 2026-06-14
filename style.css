@@ -451,6 +451,7 @@ input[type="color"] {
 .tab-bar.compact .tab-btn:not([data-nav="room"]) { display: none; }
 .tab-bar.compact .tab-btn[data-nav="room"] {
   color: var(--text);
+  font-size: 17px;
   font-weight: 700;
   border-top-color: transparent;
 }
@@ -663,37 +664,37 @@ input[type="color"] {
 .speech-bubble {
   position: relative;
   z-index: 10;
-  width: calc(100% - 28px);
-  max-width: 360px;
+  width: fit-content;
+  max-width: min(300px, calc(100% - 48px));
   margin: 0 auto;
   background: var(--surface);
   border: 2px solid #f2b3c8;
-  border-radius: 20px;
-  padding: 16px 22px;
+  border-radius: 22px;
+  padding: 22px 28px;
   box-shadow: 0 4px 16px rgba(217, 106, 140, 0.14);
   text-align: center;
   animation: bubble-pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 .speech-bubble.hidden { display: none !important; }
-/* 上向きの尻尾 (上の立ち絵を指す) */
-.speech-bubble::before {
-  content: '';
-  position: absolute;
-  top: -8px;
-  left: 50%;
-  transform: translateX(-50%);
-  border: 8px solid transparent;
-  border-bottom-color: var(--surface);
-  z-index: 1;
-}
+/* 上向きの尻尾 (枠の上に飛び出して立ち絵を指す) */
 .speech-bubble::after {
   content: '';
   position: absolute;
-  top: -11px;
+  bottom: 100%;
   left: 50%;
   transform: translateX(-50%);
-  border: 8px solid transparent;
+  border: 11px solid transparent;
   border-bottom-color: #f2b3c8;
+}
+.speech-bubble::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% - 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 9px solid transparent;
+  border-bottom-color: var(--surface);
+  z-index: 1;
 }
 #home-bubble-text {
   font-size: 16px;
