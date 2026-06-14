@@ -665,12 +665,12 @@ input[type="color"] {
   position: relative;
   z-index: 10;
   width: fit-content;
-  max-width: min(300px, calc(100% - 48px));
+  max-width: min(320px, calc(100% - 36px));
   margin: 0 auto;
   background: var(--surface);
   border: 2px solid #f2b3c8;
-  border-radius: 22px;
-  padding: 22px 28px;
+  border-radius: 26px;
+  padding: 30px 36px;
   box-shadow: 0 4px 16px rgba(217, 106, 140, 0.14);
   text-align: center;
   animation: bubble-pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
@@ -697,9 +697,10 @@ input[type="color"] {
   z-index: 1;
 }
 #home-bubble-text {
-  font-size: 16px;
-  line-height: 1.6;
-  font-weight: 500;
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
+  font-size: 19px;
+  line-height: 1.55;
+  font-weight: 400;
   color: var(--text);
   text-align: center;
 }
