@@ -30,6 +30,15 @@
   --gold:        #d9a93a;
   --danger:      #d94f4f;
 
+  /* FocusFlow パレットのフォールバック (body 直下に出すオーバーレイ等、
+     .ffx スコープ外でも var() が解決できるように :root にも定義) */
+  --bg:            #FAFAF8;
+  --card:          #ffffff;
+  --text2:         #666666;
+  --text3:         #999999;
+  --must:          #d94f4f;
+  --border-strong: #cccccc;
+
   /* シャドウ — 控えめなニュートラル */
   --shadow-sm:   0 1px 3px rgba(0, 0, 0, 0.06);
   --shadow-md:   0 2px 8px rgba(0, 0, 0, 0.08);
