@@ -225,3 +225,36 @@ function handleAllDone(eco) {
     showToast(`🎉 全完了ボーナス +${eco.allDoneCoins + bonus}🪙`);
   }, 1200);
 }
+
+// ─── そうじ (FlowClean) 連携 ─────────────────────────────────────
+// そうじのフロー (状態→イベント→ステップ) を1件終えるたびに小さな報酬を
+// 出す。付与自体は完了の瞬間に静かに行い、キャラのリアクションは
+// FlowClean 側のご褒美ポップアップを見終えた後 (無ければ自動タイムアウト後)
+// に showChoreReaction() で見せる。
+
+/** そうじイベント完了で「easy」タスク相当の小さな報酬 (コイン・親密度) を付与 */
+function rewardChoreComplete(eventLabel) {
+  if (state == null) return; // 起動順による未初期化ガード
+  const eco = getEconomy();
+  const coins = eco.coins.easy || 10;
+  const aff = eco.affection.easy || 2;
+  const prevAff = state.affection;
+  state.coins += coins;
+  state.affection += aff;
+  state.stats.totalCoinsEarned += coins;
+  checkLevelUp(prevAff);
+  saveState();
+  refreshStatusBar();
+  _pendingChoreReaction = { task: eventLabel || 'おかたづけ', coins, aff };
+}
+
+/** そうじ完了のリアクションをお部屋で表示 (お部屋へ移動してからセリフ・トーストを出す) */
+function showChoreReaction() {
+  const info = _pendingChoreReaction;
+  _pendingChoreReaction = null;
+  openRoom();
+  if (!info) return;
+  const speech = getSpeech('task_complete', { task: info.task });
+  showBubble(speech, 'joy');
+  showToast(`🪙+${info.coins} ✨+${info.aff}`);
+}

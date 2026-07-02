@@ -333,5 +333,8 @@ window.App = {
   // ユーザーがタスクを完了した瞬間に FFX が呼ぶ (完了後はお部屋へ自動移動)
   onUserCompletedTask: function () { _pendingRoomJump = true; },
   // FFX (focusflow.js) の save() から毎回呼ばれる
-  onTasksChanged: function () { ffCheckExternalCompletions(); }
+  onTasksChanged: function () { ffCheckExternalCompletions(); },
+  // FC (flowclean.js) がそうじイベント完了時に呼ぶ (報酬付与・お部屋でのリアクション)
+  rewardChoreComplete: rewardChoreComplete,
+  showChoreReaction: showChoreReaction
 };

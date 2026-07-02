@@ -536,18 +536,23 @@ function switchTab(tab) {
   currentTab = tab;
   document.getElementById('ffx-tab-home').classList.toggle('visible', tab === 'home');
   document.getElementById('tab-all').classList.toggle('visible', tab === 'all');
+  const fcPanel = document.getElementById('ffx-tab-fc');
+  if (fcPanel) fcPanel.classList.toggle('visible', tab === 'fc');
   const roomPanel = document.getElementById('ffx-tab-room');
   if (roomPanel) roomPanel.classList.toggle('visible', tab === 'room');
   document.getElementById('tab-btn-home').classList.toggle('active', tab === 'home');
   document.getElementById('tab-btn-all').classList.toggle('active', tab === 'all');
+  const fcBtn = document.getElementById('tab-btn-fc');
+  if (fcBtn) fcBtn.classList.toggle('active', tab === 'fc');
   const roomBtn = document.getElementById('tab-btn-room');
   if (roomBtn) roomBtn.classList.toggle('active', tab === 'room');
-  // お部屋では＋追加ボタンを隠す (タスク管理用なので)
+  // お部屋・そうじでは＋追加ボタンを隠す (タスク管理用なので)
   const addBtn = document.getElementById('ffx-add-btn');
-  if (addBtn) addBtn.style.display = (tab === 'room') ? 'none' : '';
+  if (addBtn) addBtn.style.display = (tab === 'room' || tab === 'fc') ? 'none' : '';
   if (tab === 'all') renderAllTasks();
+  if (tab === 'fc' && window.FC) FC.render();
   if (tab === 'room' && window.App && App.enterRoom) App.enterRoom();
-  // 下部ナビをこの画面に合わせて切り替え (タスク/すべて=コンパクト、お部屋=フル)
+  // 下部ナビをこの画面に合わせて切り替え (タスク/すべて/そうじ=コンパクト、お部屋=フル)
   if (window.App && App.refreshBottomNav) App.refreshBottomNav();
 }
 

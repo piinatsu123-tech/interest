@@ -144,6 +144,7 @@
       <div class="ffx-tabbar">
         <button class="ffx-tabbtn active" id="tab-btn-home" onclick="FFX.switchTab('home')">タスク</button>
         <button class="ffx-tabbtn" id="tab-btn-all" onclick="FFX.switchTab('all')">すべて</button>
+        <button class="ffx-tabbtn" id="tab-btn-fc" onclick="FFX.switchTab('fc')">そうじ</button>
       </div>
 
       <!-- HOME TAB (タスクダッシュボード) -->
@@ -170,6 +171,11 @@
             style="border:1.5px solid var(--border-strong);background:none;font-size:14px;font-weight:700;cursor:pointer;padding:4px 12px;border-radius:50px;color:var(--text3);font-family:'Noto Sans JP',sans-serif;transition:all .15s;">削除</button>
         </div>
         <div class="scroll" id="allTasksScroll"></div>
+      </div>
+
+      <!-- FLOWCLEAN TAB (そうじ: 家事フロー) -->
+      <div class="tab-content" id="ffx-tab-fc">
+        <div id="fc-app" class="fc"></div>
       </div>
 
       <!-- ROOM TAB (いっしょぐらし: キャラとの生活) -->
@@ -718,6 +724,7 @@
 <script src="js/gamedata.js"></script>
 <script src="js/dialogue.js"></script>
 <script src="js/focusflow.js"></script>
+<script src="js/flowclean.js"></script>
 <script src="js/core.js"></script>
 <script src="js/art.js"></script>
 <script src="js/rewards.js"></script>

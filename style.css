@@ -2065,6 +2065,302 @@ input[type="color"] {
 .ffx-add-btn:active { background: var(--border); }
 
 /* =========================================================
+   そうじ (FlowClean 家事フロー移植・.fc スコープ)
+   ========================================================= */
+.fc {
+  --fc-bg: #f5f5f5;
+  --fc-surface: #ffffff;
+  --fc-surface2: #ebebeb;
+  --fc-border: #e0e0e0;
+  --fc-red: #c0392b;
+  --fc-red-dim: rgba(192,57,43,0.07);
+  --fc-text: #111111;
+  --fc-text2: #777777;
+  --fc-text3: #bbbbbb;
+  --fc-r: 10px;
+}
+.fc, .fc * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+.fc {
+  display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden;
+  background: var(--fc-bg); color: var(--fc-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+}
+
+/* ── HEADER ── */
+.fc-hd {
+  display: flex; align-items: center;
+  padding: 14px 20px 12px;
+  border-bottom: 1px solid var(--fc-border);
+  background: var(--fc-surface);
+  flex-shrink: 0; min-height: 52px; gap: 12px;
+}
+.fc-hd-back {
+  background: none; border: none;
+  color: var(--fc-red); font-size: 17px; font-weight: 500;
+  cursor: pointer; padding: 4px 8px 4px 0;
+  display: flex; align-items: center; gap: 2px; flex-shrink: 0;
+}
+.fc-hd-title { font-size: 18px; font-weight: 700; flex: 1; color: var(--fc-text); }
+.fc-hd-meta { font-size: 14px; font-weight: 600; color: var(--fc-text3); letter-spacing: 0.04em; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.fc-hd-icon-btn { background: none; border: none; color: var(--fc-text2); font-size: 22px; cursor: pointer; padding: 4px; margin-left: auto; line-height: 1; }
+
+.fc-logo-wrap { display: flex; align-items: baseline; gap: 7px; }
+.fc-logo { font-size: 15px; font-weight: 900; letter-spacing: 0.1em; color: var(--fc-text); text-transform: uppercase; }
+.fc-logo-ver { font-size: 10px; font-weight: 500; color: var(--fc-text3); }
+
+/* ── そうじ内の小ナビ (ホーム/編集。上部のタスク/すべて/そうじタブとは別) ── */
+.fc-tab-bar {
+  display: flex; border-top: 1px solid var(--fc-border);
+  background: var(--fc-surface); flex-shrink: 0;
+}
+.fc-tab-btn { flex: 1; background: none; border: none; padding: 13px 8px; display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+.fc-tab-btn-label { font-size: 13px; font-weight: 600; color: var(--fc-text3); }
+.fc-tab-btn.active .fc-tab-btn-label { color: var(--fc-red); font-weight: 800; }
+
+/* ── SCROLL AREA ── */
+.fc-scroll { flex: 1; overflow-y: auto; padding: 20px 16px; display: flex; flex-direction: column; gap: 10px; background: var(--fc-bg); }
+.fc-scroll > * { flex-shrink: 0; }
+.fc-scroll-center { flex: 1; overflow-y: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28px 16px; background: var(--fc-bg); }
+
+.fc-label { font-size: 10px; font-weight: 800; letter-spacing: 0.16em; color: var(--fc-text3); text-transform: uppercase; padding: 0 4px; margin-top: 4px; }
+
+/* ── STATE GRID ── */
+.fc-state-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fc-state-btn {
+  background: var(--fc-surface); border: 1px solid var(--fc-border); border-radius: var(--fc-r);
+  padding: 24px 18px 22px; display: flex; flex-direction: column; align-items: flex-start;
+  cursor: pointer; min-height: 86px; transition: background 0.1s;
+}
+.fc-state-btn:active { background: var(--fc-surface2); }
+.fc-state-label { font-size: 20px; font-weight: 700; color: var(--fc-text); line-height: 1.3; }
+
+/* ── EVENT LIST ── */
+.fc-event-btn {
+  background: var(--fc-surface); border: 1px solid var(--fc-border); border-radius: var(--fc-r);
+  padding: 22px 18px; display: flex; align-items: center; gap: 12px;
+  cursor: pointer; width: 100%; text-align: left; transition: background 0.1s;
+}
+.fc-event-btn:active { background: var(--fc-surface2); }
+.fc-event-label { font-size: 20px; font-weight: 600; flex: 1; color: var(--fc-text); }
+.fc-event-arrow { color: var(--fc-text3); font-size: 22px; font-weight: 300; }
+
+/* ── FLOW ── */
+.fc-flow-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--fc-bg); }
+.fc-flow-done-list { padding: 14px 16px 0; display: flex; flex-direction: column; gap: 0; max-height: 34vh; overflow-y: auto; flex-shrink: 0; }
+.fc-done-step { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--fc-border); }
+.fc-done-check { width: 18px; height: 18px; border-radius: 50%; background: var(--fc-text3); display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; font-weight: 900; flex-shrink: 0; }
+.fc-done-step-text { font-size: 15px; color: var(--fc-text3); text-decoration: line-through; }
+
+.fc-flow-center { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+.fc-flow-current {
+  display: flex; flex-direction: column;
+  padding: 20px 22px 18px; cursor: pointer; user-select: none;
+  -webkit-user-select: none; width: 100%;
+  border: 2px solid var(--fc-text); border-radius: var(--fc-r);
+  background: var(--fc-surface);
+}
+.fc-flow-current:active { opacity: 0.6; }
+.fc-step-text { font-size: 44px; font-weight: 800; line-height: 1.2; letter-spacing: -0.02em; color: var(--fc-text); }
+.fc-flow-tap-hint { font-size: 13px; color: var(--fc-text3); margin-top: 18px; font-weight: 500; letter-spacing: 0.04em; }
+
+/* ── DEFER ── */
+.fc-defer-box {
+  background: var(--fc-red-dim); border: 1px solid var(--fc-red); border-radius: var(--fc-r);
+  padding: 24px; width: 100%;
+}
+.fc-defer-msg { font-size: 22px; color: var(--fc-text); line-height: 1.5; font-weight: 700; }
+
+/* ── BOTTOM BAR ── */
+.fc-bottom { padding: 14px 16px; border-top: 1px solid var(--fc-border); background: var(--fc-surface); flex-shrink: 0; }
+.fc-btn-primary {
+  background: var(--fc-red); border: none; border-radius: var(--fc-r);
+  padding: 20px; font-size: 20px; font-weight: 800; color: #fff;
+  cursor: pointer; width: 100%; letter-spacing: 0.01em;
+  transition: opacity 0.1s;
+}
+.fc-btn-primary:active { opacity: 0.75; }
+
+/* ── DONE SCREEN ── */
+@keyframes fc-pop { 0%{transform:scale(0);opacity:0} 65%{transform:scale(1.15)} 100%{transform:scale(1);opacity:1} }
+.fc-done-ring { width: 80px; height: 80px; border-radius: 50%; background: var(--fc-text); display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 900; color: #fff; animation: fc-pop 0.35s ease-out; }
+.fc-done-title { font-size: 28px; font-weight: 800; margin-top: 20px; color: var(--fc-text); }
+.fc-done-sub { font-size: 14px; color: var(--fc-text2); margin-top: 6px; font-weight: 500; }
+
+/* ── REWARD POPUP ── */
+.fc-reward-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.65);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 220; cursor: pointer;
+}
+.fc-reward-popup {
+  position: relative;
+  background: #111;
+  border-radius: 18px;
+  overflow: hidden;
+  max-width: min(90vw, 400px);
+  max-height: 80dvh;
+  cursor: default;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+  border: 5px solid #C9956C;
+}
+@keyframes fc-reward-reveal {
+  0%   { opacity: 0; transform: scale(0.96); filter: blur(6px); }
+  100% { opacity: 1; transform: scale(1);    filter: blur(0); }
+}
+.fc-reward-img {
+  display: block;
+  max-width: 100%;
+  max-height: 75dvh;
+  object-fit: contain;
+  animation: fc-reward-reveal 1.1s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+.fc-reward-close-btn {
+  position: absolute; top: 10px; right: 10px;
+  background: rgba(0,0,0,0.6); border: none; border-radius: 50%;
+  color: #fff; font-size: 14px; font-weight: 700;
+  width: 30px; height: 30px; cursor: pointer; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1;
+}
+.fc-reward-close-btn:active { background: rgba(192,57,43,0.85); }
+.fc-reward-msg {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: 28px 18px 18px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.72));
+  color: #fff; font-size: 19px; font-weight: 700;
+  text-align: center; line-height: 1.45;
+  pointer-events: none;
+}
+
+/* ── EDIT UI ── */
+.fc-edit-card {
+  background: var(--fc-surface); border: 1px solid var(--fc-border); border-radius: var(--fc-r);
+  padding: 20px 18px; display: flex; align-items: center; gap: 12px;
+  cursor: pointer; transition: background 0.1s;
+}
+.fc-edit-card:active { background: var(--fc-surface2); }
+.fc-edit-card-label { font-size: 19px; font-weight: 600; flex: 1; color: var(--fc-text); }
+.fc-edit-card-arrow { color: var(--fc-text3); font-size: 22px; }
+
+.fc-form-section { display: flex; flex-direction: column; gap: 8px; }
+.fc-form-label { font-size: 11px; font-weight: 800; letter-spacing: 0.14em; color: var(--fc-text3); text-transform: uppercase; padding: 0 4px; }
+.fc-form-hint { font-size: 11px; color: var(--fc-text3); padding: 0 4px; }
+
+.fc-edit-input {
+  background: var(--fc-surface); border: 1px solid var(--fc-border); border-radius: var(--fc-r);
+  padding: 16px 18px; font-size: 19px; font-weight: 500; color: var(--fc-text);
+  width: 100%; font-family: inherit;
+}
+.fc-edit-input:focus { outline: none; border-color: var(--fc-red); }
+
+.fc-step-rows { display: flex; flex-direction: column; gap: 8px; }
+.fc-step-row {
+  display: flex; align-items: stretch;
+  background: var(--fc-surface); border: 1px solid var(--fc-border); border-radius: var(--fc-r);
+  overflow: hidden; min-height: 58px;
+}
+.fc-step-num {
+  font-size: 13px; font-weight: 700; color: var(--fc-text3);
+  flex-shrink: 0; display: flex; align-items: center;
+  padding: 0 6px 0 16px; min-width: 34px;
+}
+.fc-step-inp {
+  flex: 1; background: none; border: none;
+  font-size: 18px; font-weight: 500; color: var(--fc-text);
+  font-family: inherit; padding: 14px 10px; min-width: 0;
+}
+.fc-step-inp:focus { outline: none; }
+.fc-step-del-btn {
+  background: none; border: none; border-left: 1px solid var(--fc-border);
+  color: var(--fc-text3); font-size: 20px; cursor: pointer;
+  padding: 0 18px; flex-shrink: 0;
+  display: flex; align-items: center;
+}
+.fc-step-del-btn:active { background: var(--fc-red-dim); color: var(--fc-red); }
+
+.fc-btn-ghost {
+  background: none; border: 1.5px dashed var(--fc-border); border-radius: var(--fc-r);
+  padding: 18px 16px; font-size: 17px; font-weight: 600; color: var(--fc-text2);
+  cursor: pointer; width: 100%; text-align: center; display: block;
+}
+.fc-btn-ghost:active { border-color: var(--fc-red); color: var(--fc-red); }
+.fc-btn-danger {
+  background: none; border: 1px solid rgba(192,57,43,0.3); border-radius: var(--fc-r);
+  padding: 18px 16px; font-size: 17px; font-weight: 600; color: var(--fc-red);
+  cursor: pointer; width: 100%; text-align: center;
+}
+.fc-btn-danger:active { background: var(--fc-red-dim); }
+.fc-empty-msg { font-size: 14px; color: var(--fc-text3); padding: 8px 4px; }
+
+/* ── ENV CARDS (道具の場所) ── */
+.fc-env-card {
+  background: var(--fc-surface); border: 1px solid var(--fc-border); border-radius: var(--fc-r);
+  overflow: hidden;
+}
+.fc-env-name-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--fc-border);
+}
+.fc-env-name-inp {
+  flex: 1; background: none; border: none;
+  font-size: 18px; font-weight: 700; color: var(--fc-text);
+  font-family: inherit; min-width: 0;
+}
+.fc-env-name-inp:focus { outline: none; }
+.fc-env-val-row { padding: 12px 14px 10px; }
+.fc-env-val-inp {
+  width: 100%; background: none; border: none;
+  font-size: 18px; font-weight: 500; color: var(--fc-text2);
+  font-family: inherit;
+}
+.fc-env-val-inp:focus { outline: none; }
+.fc-env-key-hint {
+  padding: 0 14px 10px;
+  font-size: 11px; color: var(--fc-text3);
+  font-family: ui-monospace, monospace;
+}
+.fc-env-del-btn {
+  background: none; border: none;
+  color: var(--fc-text3); font-size: 22px;
+  cursor: pointer; padding: 0; line-height: 1; flex-shrink: 0;
+}
+.fc-env-del-btn:active { color: var(--fc-red); }
+
+/* ── REWARD THUMBS ── */
+.fc-reward-thumbs {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+}
+.fc-reward-thumb-wrap {
+  position: relative; aspect-ratio: 1;
+  border-radius: 8px; overflow: hidden;
+  background: var(--fc-surface2);
+}
+.fc-reward-thumb {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.fc-reward-del-btn {
+  position: absolute; top: 5px; right: 5px;
+  background: rgba(0,0,0,0.55); border: none; border-radius: 50%;
+  color: #fff; font-size: 13px; font-weight: 700;
+  width: 26px; height: 26px; cursor: pointer; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.fc-reward-del-btn:active { background: rgba(192,57,43,0.85); }
+
+/* ── SECTION DIVIDER ── */
+.fc-section-sep { height: 1px; background: var(--fc-border); margin: 6px 0; }
+
+/* ── REWARD MESSAGE ── */
+.fc-msg-row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--fc-surface); border: 1px solid var(--fc-border);
+  border-radius: var(--fc-r); padding: 16px 14px;
+}
+.fc-msg-text { flex: 1; font-size: 16px; color: var(--fc-text); line-height: 1.4; }
+
+/* =========================================================
    自分のパラメーター (ときメモ式)
    ========================================================= */
 /* タスク編集画面のカテゴリチップ */
