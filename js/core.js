@@ -148,9 +148,11 @@ function isSetupDone() {
 }
 
 // ─── 日付ロールオーバー ─────────────────────────────────────────
+/** 戻り値: { isNewDay, wasAway }。isNewDay は「今日初めてのアクセスか」
+    (棚卸しトリガー等に使用)。wasAway は 2 日以上間隔が空いていたか */
 function doRollover() {
   const today = todayStr();
-  if (state.lastVisit === today) return false; // 同じ日
+  if (state.lastVisit === today) return { isNewDay: false, wasAway: false }; // 同じ日
 
   const wasAway = state.lastVisit !== null &&
     (new Date(today) - new Date(state.lastVisit)) / 86400000 >= 2;
@@ -158,7 +160,7 @@ function doRollover() {
   // タスクは FocusFlow システム (ff-tasks) が管理するためここでは触らない
   state.lastVisit = today;
   saveState();
-  return wasAway;
+  return { isNewDay: true, wasAway };
 }
 
 // ─── 時間帯 (カスタマイズ可能) ──────────────────────────────────

@@ -453,6 +453,30 @@
   </div>
 </div>
 
+<!-- ===================== 期限切れタスクの棚卸し (毎日最初のアクセス時) ===================== -->
+<div id="triage-overlay" class="triage-overlay hidden">
+  <div class="triage-box">
+    <div class="triage-header">
+      <div class="triage-title">今日、これどうする？</div>
+      <div class="triage-progress" id="triage-progress"></div>
+    </div>
+    <div class="triage-card">
+      <div class="triage-overdue-badge" id="triage-overdue-label"></div>
+      <div class="triage-task-title" id="triage-task-title"></div>
+    </div>
+    <div class="triage-actions">
+      <button class="triage-btn triage-btn-today" id="triage-today">📌 今日やる</button>
+      <div class="triage-defer-row">
+        <button class="triage-btn triage-btn-defer" id="triage-defer-1">明日</button>
+        <button class="triage-btn triage-btn-defer" id="triage-defer-3">3日後</button>
+        <button class="triage-btn triage-btn-defer" id="triage-defer-7">来週</button>
+      </div>
+      <button class="triage-btn triage-btn-delete" id="triage-delete">🗑 もうやらない</button>
+      <button class="triage-btn triage-btn-skip" id="triage-skip">あとで決める</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===================== セリフエディタ ===================== -->
 <div id="dialogue-editor" class="de-overlay hidden">
   <div class="de-header">
@@ -725,6 +749,7 @@
 <script src="js/dialogue.js"></script>
 <script src="js/focusflow.js"></script>
 <script src="js/flowclean.js"></script>
+<script src="js/triage.js"></script>
 <script src="js/core.js"></script>
 <script src="js/art.js"></script>
 <script src="js/rewards.js"></script>

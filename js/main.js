@@ -214,14 +214,19 @@ function bindEvents() {
   // ページ表示/非表示でロールオーバーチェック
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && isSetupDone()) {
-      const wasAway = doRollover();
-      if (wasAway) {
-        // 久しぶりはお部屋を開いて「おかえり」を見せる
-        openRoom();
-        renderHome(true);
-      }
-      // FocusFlow 側での完了を検知
-      ffCheckExternalCompletions();
+      const { isNewDay, wasAway } = doRollover();
+      const proceed = () => {
+        if (wasAway) {
+          // 久しぶりはお部屋を開いて「おかえり」を見せる
+          openRoom();
+          renderHome(true);
+        }
+        // FocusFlow 側での完了を検知
+        ffCheckExternalCompletions();
+      };
+      // 日付が変わっての最初の復帰なら、期限切れタスクがある場合だけ棚卸しを挟む
+      if (isNewDay && window.Triage) Triage.maybeStart(proceed);
+      else proceed();
     }
   });
 
@@ -267,7 +272,7 @@ function init() {
     initWizard();
   } else {
     // 日付ロールオーバー
-    const wasAway = doRollover();
+    const { isNewDay, wasAway } = doRollover();
 
     document.getElementById('screen-setup').classList.add('hidden');
     document.getElementById('screen-main').classList.remove('hidden');
@@ -275,25 +280,30 @@ function init() {
     // お部屋の状態を用意 (背景・立ち絵・休憩中の表情)
     prepareRoom();
 
-    if (wasAway) {
-      // 久しぶりはお部屋を開いて「おかえり」を見せる
-      openRoom();
-      renderHome(true);
-    } else {
-      // 通常起動は FocusFlow のタスクダッシュボードから
-      switchTab('tasks');
-      if (window.FFX) FFX.switchTab('home');
-    }
-
     // 見切れているカスタム立ち絵を修復 (旧サニタイザーの viewBox 強制の救済)
     repairCustomArtViewBox();
 
     // 旧バージョンのネイティブタスクを FocusFlow システムへ一度だけ移行
     migrateNativeTasks();
 
-    // 別の場所 (旧 FocusFlow・別タブ) での完了を検知して報酬付与
-    // (comeback の挨拶を消さないよう少し遅らせる)
-    setTimeout(ffCheckExternalCompletions, wasAway ? 2500 : 800);
+    const proceed = () => {
+      if (wasAway) {
+        // 久しぶりはお部屋を開いて「おかえり」を見せる
+        openRoom();
+        renderHome(true);
+      } else {
+        // 通常起動は FocusFlow のタスクダッシュボードから
+        switchTab('tasks');
+        if (window.FFX) FFX.switchTab('home');
+      }
+      // 別の場所 (旧 FocusFlow・別タブ) での完了を検知して報酬付与
+      // (comeback の挨拶を消さないよう少し遅らせる)
+      setTimeout(ffCheckExternalCompletions, wasAway ? 2500 : 800);
+    };
+
+    // 日付が変わっての最初のアクセスなら、期限切れタスクがある場合だけ棚卸しを挟む
+    if (isNewDay && window.Triage) Triage.maybeStart(proceed);
+    else proceed();
   }
 
   bindEvents();

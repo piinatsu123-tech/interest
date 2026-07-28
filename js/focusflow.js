@@ -782,6 +782,32 @@ function actionSetUrgency(urgency) {
   toast('優先度を変更しました');
 }
 
+// ─── 期限切れタスクの棚卸し (triage.js から呼ばれる) ────────────────
+/** 未完了・期限切れ(dueDate が今日より前)のタスク一覧 */
+function overdueTasks() {
+  const today = todayStr();
+  return tasks.filter(t => !t.done && t.dueDate && t.dueDate < today);
+}
+
+function triageTaskToday(id) {
+  const t = tasks.find(t => t.id === id);
+  if (!t) return;
+  t.urgency = 'must';
+  save(); renderMain(); renderAllTasks();
+}
+
+function triageDeferTask(id, newDate) {
+  const t = tasks.find(t => t.id === id);
+  if (!t) return;
+  t.dueDate = newDate;
+  save(); renderMain(); renderAllTasks();
+}
+
+function triageDeleteTask(id) {
+  deleteTask(id);
+  renderAllTasks();
+}
+
 // ─── EDIT SCREEN ─────────────────────────────────────────────────
 let editId = null;
 
@@ -1123,6 +1149,8 @@ window.FFX = {
   // app.js 連携用
   renderMain, addTask,
   getTasks: function () { return tasks; },
-  getCurrentTab: function () { return currentTab; }
+  getCurrentTab: function () { return currentTab; },
+  // triage.js (期限切れタスクの棚卸し) 連携用
+  getOverdueTasks: overdueTasks, triageTaskToday, triageDeferTask, triageDeleteTask
 };
 })();

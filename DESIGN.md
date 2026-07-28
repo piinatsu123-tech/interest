@@ -23,6 +23,7 @@
 | `js/dialogue.js` | セリフエンジン+セリフデータ | `Dialogue` |
 | `js/focusflow.js` | FocusFlow タスクシステム移植版 | `FFX` |
 | `js/flowclean.js` | FlowClean 家事フロー移植版(そうじタブ) | `FC` |
+| `js/triage.js` | 期限切れタスクの棚卸し(毎日最初のアクセス時の強制トリアージ) | `Triage` |
 | `js/core.js` | ユーティリティ・DEFAULT_STATE・状態管理・日付ロールオーバー・時間帯スロット・確認ダイアログ | (App 層) |
 | `js/art.js` | SVG サニタイザ・viewBox 補修・`renderChara`・画像立ち絵・表情マネージャ | (App 層) |
 | `js/rewards.js` | FocusFlow 連携・報酬付与・レベルアップ・パラメーター経済 | (App 層) |
@@ -249,6 +250,34 @@ FocusFlow のタスク一覧とは全く異なる「その場で発生した家�
 - **そうじタブでは「＋追加」ボタンを隠す**(お部屋と同様、タスク管理用ボタンのため)。
   下部ナビはそうじ表示中も「タスク/すべて」と同じくコンパクト表示
   (お部屋へ行く 1 タブのみ。`App.refreshBottomNav()`)
+
+## 期限切れタスクの棚卸し(js/triage.js)
+
+期限切れタスク(`dueDate` が今日より前・未完了)が優先度グループに埋もれたまま
+放置される問題への対策。**毎日最初のアクセス時**に、期限切れタスクが 1 件でも
+あればホーム/お部屋の表示に進む前に強制的にトリアージ画面を挟む。ゼロ件の日は
+何も表示されず、通常のフローと完全に同じ体感。
+
+- **トリガー**: `doRollover()`(core.js)を `{ isNewDay, wasAway }` を返す形に変更
+  (元は `wasAway` の bool のみ)。`isNewDay` は「その日初めてのアクセスか」を表し、
+  同日中の再訪問では常に `false`(トリアージは 1 日 1 回だけ)。
+  `main.js` の `init()` と `visibilitychange` ハンドラの両方で、`isNewDay` かつ
+  `window.Triage` があれば `Triage.maybeStart(proceed)` を呼び、`proceed` に元々の
+  ロールオーバー後処理(おかえり演出 or タスクタブ表示)を渡す。期限切れが無ければ
+  `maybeStart` は即座に `proceed()` を呼ぶので何も表示されない
+- **画面**: `#triage-overlay`(不透明度低めの黒背景+中央カード、`.levelup-overlay`と
+  同系統の演出)。期限切れタスクを 1 件ずつカード表示し、4 択すべてワンタップ:
+  - **📌 今日やる** → `FFX.triageTaskToday(id)` で優先度を `must` に
+  - **明日／3日後／来週** → `FFX.triageDeferTask(id, newDate)` で `dueDate` を延長
+  - **🗑 もうやらない** → `FFX.triageDeleteTask(id)` で即削除(タスクのスワイプ削除と
+    同じく確認ダイアログ無し。棚卸しは「全部ワンタップ」を維持するため)
+  - **あとで決める** → 何もせず次のカードへ(そのタスクは翌日また対象になる)
+- **「強制」の設計**: 完全ブロッキングだが、「あとで決める」で個々の判断は先送りできる。
+  溜まった期限切れの多さでユーザーを罰しない(実行力を削がないため)一方、
+  存在を毎日必ず一度は目にする設計
+- **公開 API**: `window.Triage.maybeStart(afterDone)` のみ。タスクデータの読み書きは
+  すべて `FFX.getOverdueTasks()` / `triageTaskToday` / `triageDeferTask` /
+  `triageDeleteTask`(focusflow.js に実装、`window.FFX` 経由で公開)を介す
 
 ## 複数キャラクター(ロスター)
 
