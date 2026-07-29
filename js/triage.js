@@ -1,8 +1,8 @@
 'use strict';
 /* triage.js — 期限切れタスクの棚卸し(毎日最初のアクセス時)
    FocusFlow の期限切れタスク(dueDate が今日より前・未完了)が1件でもあれば、
-   通常のホーム/お部屋表示に進む前にカード形式で1件ずつ「今日やる / 期限を
-   延ばす / もうやらない / あとで決める」を選ばせる。ゼロ件の日は何もしない。
+   通常のホーム/お部屋表示に進む前にカード形式で1件ずつ「今日/明日・来週・
+   日付指定で延期/削除/あとで」を選ばせる。ゼロ件の日は何もしない。
    公開: window.Triage.maybeStart(afterDone) */
 (function () {
 
@@ -50,6 +50,11 @@ function render() {
   document.getElementById('triage-progress').textContent = `${idx + 1} / ${queue.length}`;
   document.getElementById('triage-task-title').textContent = t.title;
   document.getElementById('triage-overdue-label').textContent = formatOverdueDays(t.dueDate);
+  const dateInput = document.getElementById('triage-date-input');
+  if (dateInput) {
+    dateInput.min = todayStr();
+    dateInput.value = '';
+  }
 }
 
 function next() { idx++; render(); }
@@ -63,6 +68,12 @@ function actToday() {
 function actDefer(days) {
   const t = currentTask(); if (!t) return;
   FFX.triageDeferTask(t.id, addDays(days));
+  next();
+}
+
+function actDeferToDate(dateStr) {
+  const t = currentTask(); if (!t || !dateStr) return;
+  FFX.triageDeferTask(t.id, dateStr);
   next();
 }
 
@@ -109,11 +120,12 @@ function bindEvents() {
   const bind = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
   bind('triage-today', actToday);
   bind('triage-defer-1', () => actDefer(1));
-  bind('triage-defer-3', () => actDefer(3));
   bind('triage-defer-7', () => actDefer(7));
   bind('triage-delete', actDelete);
   bind('triage-skip', actSkip);
   bind('settings-triage-btn', openManually);
+  const dateInput = document.getElementById('triage-date-input');
+  if (dateInput) dateInput.addEventListener('change', () => actDeferToDate(dateInput.value));
 }
 
 if (document.readyState === 'loading') {
