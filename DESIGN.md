@@ -196,10 +196,17 @@ SPA。ベースは FocusFlow(タスク管理)。**上部タブ**(`FFX.switchTab`
 - **名前空間**: クラス/ID の衝突回避に `ffx-` プレフィックス
   (`screen`→`ffx-screen` 等 6 クラス+画面 ID)。CSS 変数は `.ffx` スコープで上書き。
   公開 API は `window.FFX`(inline onclick と App 層 `rewards.js` の連携用)
-- **データ**: localStorage `ff-tasks`(FocusFlow と同一形式
-  `{id, title, done, urgency: must|want|nice|scheduled, steps, estimate, dueDate?, scheduledDate?}`)。
+- **データ**: localStorage `ff-tasks`(FocusFlow と同一形式に `order` を追加した
+  `{id, title, done, urgency: must|want|nice|scheduled, steps, estimate, dueDate?, scheduledDate?, order}`)。
   いっしょぐらし独自のタスクモデルは廃止し、初回起動時に未完了分を自動移行
   (difficulty hard→must / normal→want / easy→nice。`state.ff.migrated`)
+- **今日中(must)タスクの手番の順番**: グループ詳細画面(`#ffx-screen-group`)で
+  `currentUrgency === 'must'` の時だけ、未完了タスクに ①②③...(タスク名より大きい
+  22px の番号バッジ)と ▲▼ の並べ替えボタンを表示。`t.order` (数値、`migrateTasks()`
+  で無ければ配列位置を初期値に)で昇順ソートし、`FFX.moveTask(id, ±1)` が同じ
+  urgency 内の隣接タスクと `order` を入れ替えて保存・再描画する。`addTask()` は
+  新規タスクに既存最小 order−1 を割り当てる(常に一覧の先頭に来る、旧 `unshift`
+  の見た目を維持)。want/nice/scheduled では番号・並べ替え UI は出さない
 - **追加機能**: ヘッダーの「＋追加」ボタンから新規タスク作成(本家は LINE 取り込みのみ)。
   タイトル未入力で戻ったら破棄
 - **報酬経路の一元化**: FFX の `save()` が毎回 `App.onTasksChanged()` を呼ぶ →

@@ -31,11 +31,13 @@ function taskEstimate(t) {
 function migrateTasks(list) {
   const urgencyMap  = { must: 'must', want: 'want', idea: 'nice' };
   const priorityMap = { high: 'must', medium: 'want', low: 'nice' };
-  return list.map(t => {
+  return list.map((t, i) => {
     if (!t.id) t.id = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
     if (!t.title && t.text) t.title = t.text; // 旧形式/外部形式の正規化
     t.done    = t.done || false;
     t.urgency = t.urgency || urgencyMap[t.type] || priorityMap[t.priority] || 'want';
+    // 手動並べ替え用の順序 (無ければ配列位置を初期値に。表示順を変えないため)
+    if (typeof t.order !== 'number') t.order = i;
     // steps を内部フォーマット（text/done/estimatedMinutes）に統一
     t.steps = (t.steps || []).map(s => typeof s === 'string'
       ? { text: s, done: false, estimatedMinutes: 0 }
@@ -194,15 +196,37 @@ function renderGroupList() {
   const done = tasks.filter(t =>  t.done && t.urgency === currentUrgency);
   if (currentUrgency === 'scheduled') {
     undone = undone.sort((a, b) => (a.scheduledDate || '') < (b.scheduledDate || '') ? -1 : 1);
+  } else {
+    undone = undone.sort((a, b) => (a.order || 0) - (b.order || 0));
   }
-  const list = [...undone, ...done];
-  const el   = document.getElementById('groupTaskList');
-  if (!list.length) {
+  const el = document.getElementById('groupTaskList');
+  if (!undone.length && !done.length) {
     el.innerHTML = `<div class="empty-state"><p>タスクがありません</p></div>`;
     return;
   }
-  el.innerHTML = list.map(taskCardHTML).join('');
+  // 今日中(must)は手番の順番を1件ずつ番号付きで表示・並べ替えできる
+  const showOrder = currentUrgency === 'must';
+  const undoneHTML = undone.map((t, i) => taskCardHTML(t, showOrder ? i : null, undone.length));
+  const doneHTML = done.map(t => taskCardHTML(t, null, 0));
+  el.innerHTML = [...undoneHTML, ...doneHTML].join('');
   addSwipeListeners();
+}
+
+/** 今日中(must)グループ内で、タスクの手動順序を1つ上/下に入れ替える */
+function moveTask(id, direction) {
+  const t = tasks.find(t => t.id === id);
+  if (!t) return;
+  const group = tasks.filter(x => !x.done && x.urgency === t.urgency)
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+  const idx = group.findIndex(x => x.id === id);
+  const swapIdx = idx + direction;
+  if (idx < 0 || swapIdx < 0 || swapIdx >= group.length) return;
+  const other = group[swapIdx];
+  const tmp = t.order || 0;
+  t.order = other.order || 0;
+  other.order = tmp;
+  save();
+  renderGroupList();
 }
 
 function formatScheduledDate(dateStr) {
@@ -212,20 +236,29 @@ function formatScheduledDate(dateStr) {
   return `${d.getMonth()+1}/${d.getDate()}（${days[d.getDay()]}）に実行予定`;
 }
 
-function taskCardHTML(t) {
+/** orderIndex: 今日中(must)グループでの手番 (0始まり)。番号+並べ替えを出す時だけ数値を渡す */
+function taskCardHTML(t, orderIndex, undoneCount) {
   const doneClass = t.done ? ' done-card' : '';
   const bodyClick = t.done ? '' : `onclick="FFX.selectTask('${t.id}')"`;
   const scheduledStr = (t.urgency === 'scheduled' && t.scheduledDate)
     ? `<div style="font-size:12px;color:var(--text2);margin-top:2px;">${formatScheduledDate(t.scheduledDate)}</div>`
     : '';
+  const showOrder = typeof orderIndex === 'number';
+  const orderBadge = showOrder ? `<div class="task-card-order">${orderIndex + 1}</div>` : '';
+  const reorderBtns = showOrder ? `<div class="task-card-reorder">
+        <button class="reorder-btn" onclick="FFX.moveTask('${t.id}',-1)" ${orderIndex === 0 ? 'disabled' : ''} aria-label="上へ">▲</button>
+        <button class="reorder-btn" onclick="FFX.moveTask('${t.id}',1)" ${orderIndex === undoneCount - 1 ? 'disabled' : ''} aria-label="下へ">▼</button>
+      </div>` : '';
   return `<div class="swipe-container" data-id="${t.id}">
     <div class="delete-bg">削除</div>
     <div class="ffx-task-card${doneClass}" data-urgency="${t.urgency || 'want'}">
+      ${orderBadge}
       <div class="task-card-body" ${bodyClick} style="flex:1;min-width:0;cursor:${t.done ? 'default' : 'pointer'};">
         <div class="task-card-title">${esc(t.title)}</div>
         ${scheduledStr}
         <div class="task-card-meta">${taskEstimate(t)}分</div>
       </div>
+      ${reorderBtns}
       <button class="check-btn" onclick="FFX.toggleDone('${t.id}')">${t.done ? '✓' : ''}</button>
     </div>
   </div>`;
@@ -288,7 +321,9 @@ function toggleDone(id) {
 }
 
 function addTask(t) {
-  tasks.unshift({ id: uid(), done: false, steps: [], createdAt: new Date().toISOString(), ...t });
+  // 新規タスクは常に一覧の先頭に来るよう、既存の最小 order より小さい値を割り当てる
+  const minOrder = tasks.length ? Math.min(...tasks.map(x => x.order || 0)) : 0;
+  tasks.unshift({ id: uid(), done: false, steps: [], createdAt: new Date().toISOString(), order: minOrder - 1, ...t });
   save();
 }
 
@@ -1139,7 +1174,7 @@ async function importFromClipboard() {
 // ─── 公開 API ─────────────────────────────────────────────────────
 window.FFX = {
   // inline onclick 用
-  switchTab, showGroup, goBack, selectTask, toggleDone, toggleDeleteMode,
+  switchTab, showGroup, goBack, selectTask, toggleDone, toggleDeleteMode, moveTask,
   toggleTimer, startStep, advanceStep, completeTask, showStepList,
   openEditScreen, closeEditScreen, openNewTask, allCardClick,
   openStepDetail, openStepDetailFrom, closeStepDetail, saveStepDetail, deleteFromStepDetail,
