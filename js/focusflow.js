@@ -54,6 +54,8 @@ const APP_VERSION = 'v6.0';
 // ─── STATE ───────────────────────────────────────────────────────
 let tasks = migrateTasks(JSON.parse(localStorage.getItem('ff-tasks') || '[]'));
 let currentUrgency = null;
+let reorderMode    = false; // 今日中(must)グループの並べ替えモード
+let reorderTapSeq  = [];    // 並べ替えモード中にタップした順の id 一覧
 let focusId        = null;
 let timerTotal     = 0;
 let timerLeft      = 0;
@@ -90,6 +92,10 @@ const esc  = s => String(s||'').replace(/[&<>"']/g, c =>
   });
   if (changed) localStorage.setItem('ff-tasks', JSON.stringify(tasks));
 })();
+
+// 手番の番号表示 (①②③…)。21件目以降は "(21)" のようにフォールバック
+const CIRCLED_DIGITS = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳'.split('');
+function circledNumber(n) { return CIRCLED_DIGITS[n - 1] || `(${n})`; }
 
 const GROUP_CONFIG = [
   { urgency: 'must', title: '今日中に絶対' },
@@ -178,6 +184,8 @@ function autoPromoteScheduled() {
 }
 function showGroup(urgency) {
   currentUrgency = urgency;
+  reorderMode = false;
+  reorderTapSeq = [];
   const cfg = GROUP_CONFIG.find(g => g.urgency === urgency);
   const list = tasks.filter(t => !t.done && t.urgency === urgency);
 
@@ -186,6 +194,12 @@ function showGroup(urgency) {
 
   document.getElementById('groupHeaderTitle').textContent = cfg.title;
   document.getElementById('groupHeaderSub').textContent   = list.length > 0 ? estStr : '';
+  const reorderBtn = document.getElementById('groupReorderBtn');
+  if (reorderBtn) {
+    reorderBtn.classList.toggle('hidden', urgency !== 'must');
+    reorderBtn.textContent = '編集';
+    reorderBtn.classList.remove('active');
+  }
 
   renderGroupList();
   document.getElementById('ffx-screen-group').classList.add('visible');
@@ -204,29 +218,49 @@ function renderGroupList() {
     el.innerHTML = `<div class="empty-state"><p>タスクがありません</p></div>`;
     return;
   }
-  // 今日中(must)は手番の順番を1件ずつ番号付きで表示・並べ替えできる
+  // 今日中(must)は手番の番号を表示。「編集」中はタップした順に番号を振り直せる
   const showOrder = currentUrgency === 'must';
-  const undoneHTML = undone.map((t, i) => taskCardHTML(t, showOrder ? i : null, undone.length));
-  const doneHTML = done.map(t => taskCardHTML(t, null, 0));
+  const undoneHTML = undone.map(t => taskCardHTML(t, showOrder));
+  const doneHTML = done.map(t => taskCardHTML(t, false));
   el.innerHTML = [...undoneHTML, ...doneHTML].join('');
   addSwipeListeners();
 }
 
-/** 今日中(must)グループ内で、タスクの手動順序を1つ上/下に入れ替える */
-function moveTask(id, direction) {
-  const t = tasks.find(t => t.id === id);
-  if (!t) return;
-  const group = tasks.filter(x => !x.done && x.urgency === t.urgency)
-    .sort((a, b) => (a.order || 0) - (b.order || 0));
-  const idx = group.findIndex(x => x.id === id);
-  const swapIdx = idx + direction;
-  if (idx < 0 || swapIdx < 0 || swapIdx >= group.length) return;
-  const other = group[swapIdx];
-  const tmp = t.order || 0;
-  t.order = other.order || 0;
-  other.order = tmp;
-  save();
+/** 「編集」⇔「完了」を切り替える。完了時にタップ順を確定して保存する */
+function toggleReorderMode() {
+  if (reorderMode) {
+    finalizeReorder();
+  } else {
+    reorderMode = true;
+    reorderTapSeq = [];
+  }
+  const btn = document.getElementById('groupReorderBtn');
+  if (btn) {
+    btn.textContent = reorderMode ? '完了' : '編集';
+    btn.classList.toggle('active', reorderMode);
+  }
   renderGroupList();
+}
+
+/** 編集モード中にタスクをタップ: 次の番号を振る (既にタップ済みなら末尾に振り直し) */
+function reorderTap(id) {
+  if (!reorderMode) return;
+  reorderTapSeq = reorderTapSeq.filter(x => x !== id);
+  reorderTapSeq.push(id);
+  renderGroupList();
+}
+
+/** タップした順に order を確定。タップされなかったタスクは元の相対順のまま後ろに続く */
+function finalizeReorder() {
+  reorderMode = false;
+  if (!reorderTapSeq.length) return;
+  const group = tasks.filter(t => !t.done && t.urgency === currentUrgency)
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+  const tapped   = reorderTapSeq.map(id => group.find(t => t.id === id)).filter(Boolean);
+  const untapped = group.filter(t => !reorderTapSeq.includes(t.id));
+  [...tapped, ...untapped].forEach((t, i) => { t.order = i; });
+  reorderTapSeq = [];
+  save();
 }
 
 function formatScheduledDate(dateStr) {
@@ -236,30 +270,40 @@ function formatScheduledDate(dateStr) {
   return `${d.getMonth()+1}/${d.getDate()}（${days[d.getDay()]}）に実行予定`;
 }
 
-/** orderIndex: 今日中(must)グループでの手番 (0始まり)。番号+並べ替えを出す時だけ数値を渡す */
-function taskCardHTML(t, orderIndex, undoneCount) {
+/** showOrder: 今日中(must)グループの未完了タスクに手番の番号を出すか */
+function taskCardHTML(t, showOrder) {
   const doneClass = t.done ? ' done-card' : '';
-  const bodyClick = t.done ? '' : `onclick="FFX.selectTask('${t.id}')"`;
+  const inEditMode = showOrder && reorderMode && !t.done;
+  const bodyClick = inEditMode ? `onclick="FFX.reorderTap('${t.id}')"`
+    : (t.done ? '' : `onclick="FFX.selectTask('${t.id}')"`);
   const scheduledStr = (t.urgency === 'scheduled' && t.scheduledDate)
     ? `<div style="font-size:12px;color:var(--text2);margin-top:2px;">${formatScheduledDate(t.scheduledDate)}</div>`
     : '';
-  const showOrder = typeof orderIndex === 'number';
-  const orderBadge = showOrder ? `<div class="task-card-order">${orderIndex + 1}</div>` : '';
-  const reorderBtns = showOrder ? `<div class="task-card-reorder">
-        <button class="reorder-btn" onclick="FFX.moveTask('${t.id}',-1)" ${orderIndex === 0 ? 'disabled' : ''} aria-label="上へ">▲</button>
-        <button class="reorder-btn" onclick="FFX.moveTask('${t.id}',1)" ${orderIndex === undoneCount - 1 ? 'disabled' : ''} aria-label="下へ">▼</button>
-      </div>` : '';
+  let orderBadge = '';
+  if (showOrder && !t.done) {
+    if (!reorderMode) {
+      const group = tasks.filter(x => !x.done && x.urgency === currentUrgency)
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
+      const n = group.findIndex(x => x.id === t.id) + 1;
+      orderBadge = `<div class="task-card-order">${circledNumber(n)}</div>`;
+    } else {
+      const tapIdx = reorderTapSeq.indexOf(t.id);
+      orderBadge = tapIdx >= 0
+        ? `<div class="task-card-order">${circledNumber(tapIdx + 1)}</div>`
+        : `<div class="task-card-order task-card-order-pending">○</div>`;
+    }
+  }
+  const tappedClass = inEditMode && reorderTapSeq.includes(t.id) ? ' reorder-tapped' : '';
   return `<div class="swipe-container" data-id="${t.id}">
     <div class="delete-bg">削除</div>
-    <div class="ffx-task-card${doneClass}" data-urgency="${t.urgency || 'want'}">
+    <div class="ffx-task-card${doneClass}${tappedClass}" data-urgency="${t.urgency || 'want'}">
       ${orderBadge}
       <div class="task-card-body" ${bodyClick} style="flex:1;min-width:0;cursor:${t.done ? 'default' : 'pointer'};">
         <div class="task-card-title">${esc(t.title)}</div>
         ${scheduledStr}
         <div class="task-card-meta">${taskEstimate(t)}分</div>
       </div>
-      ${reorderBtns}
-      <button class="check-btn" onclick="FFX.toggleDone('${t.id}')">${t.done ? '✓' : ''}</button>
+      <button class="check-btn" onclick="FFX.toggleDone('${t.id}')" ${inEditMode ? 'disabled' : ''}>${t.done ? '✓' : ''}</button>
     </div>
   </div>`;
 }
@@ -507,6 +551,7 @@ function goBack(from) {
     document.getElementById('ffx-screen-focus').classList.remove('visible');
     focusId = null;
   } else if (from === 'group') {
+    if (reorderMode) finalizeReorder(); // 編集中に戻った場合もタップ済み分は確定
     document.getElementById('ffx-screen-group').classList.remove('visible');
     currentUrgency = null;
     renderMain();
@@ -1174,7 +1219,8 @@ async function importFromClipboard() {
 // ─── 公開 API ─────────────────────────────────────────────────────
 window.FFX = {
   // inline onclick 用
-  switchTab, showGroup, goBack, selectTask, toggleDone, toggleDeleteMode, moveTask,
+  switchTab, showGroup, goBack, selectTask, toggleDone, toggleDeleteMode,
+  toggleReorderMode, reorderTap,
   toggleTimer, startStep, advanceStep, completeTask, showStepList,
   openEditScreen, closeEditScreen, openNewTask, allCardClick,
   openStepDetail, openStepDetailFrom, closeStepDetail, saveStepDetail, deleteFromStepDetail,
