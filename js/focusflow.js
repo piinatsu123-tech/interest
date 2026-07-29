@@ -859,6 +859,9 @@ function triageTaskToday(id) {
   const t = tasks.find(t => t.id === id);
   if (!t) return;
   t.urgency = 'must';
+  // 期限も今日にする。これで今日はもう「期限切れ」ではなくなり、
+  // 終わらなければ翌日また期限切れとして棚卸しに出てくる
+  t.dueDate = todayStr();
   save(); renderMain(); renderAllTasks();
 }
 
