@@ -95,6 +95,16 @@ function maybeStart(afterDone) {
   render();
 }
 
+/** せってい画面などから手動で開く。自動起動と違い、期限切れが無ければ
+    「無かった」ことが分かるようトーストを出す(自動起動は毎日無音のまま) */
+function openManually() {
+  if (!overdueList().length) {
+    if (typeof showToast === 'function') showToast('期限切れのタスクはありません');
+    return;
+  }
+  maybeStart(() => {});
+}
+
 function bindEvents() {
   const bind = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
   bind('triage-today', actToday);
@@ -103,6 +113,7 @@ function bindEvents() {
   bind('triage-defer-7', () => actDefer(7));
   bind('triage-delete', actDelete);
   bind('triage-skip', actSkip);
+  bind('settings-triage-btn', openManually);
 }
 
 if (document.readyState === 'loading') {
@@ -111,5 +122,5 @@ if (document.readyState === 'loading') {
   bindEvents();
 }
 
-window.Triage = { maybeStart };
+window.Triage = { maybeStart, openManually };
 })();
