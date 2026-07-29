@@ -33,6 +33,26 @@
 | `js/triage.js` | 期限切れタスクの棚卸し | `Triage` |
 | `js/core.js` | `esc`/`todayStr`/`showToast`・`lastVisit` の保存・日付ロールオーバー・確認ダイアログ・リセット | (App 層) |
 | `js/main.js` | 画面切替・イベント登録・`init()`(**最後に読み込む**) | `App` |
+| `worker/worker.js` | Cloudflare Worker(LINE ボット・AI タスク分解・定期タスク・朝の通知) | — |
+| `worker/wrangler.toml` | Worker のデプロイ設定(名前・KV バインディング・Cron) | — |
+
+## デプロイ
+
+push 先は `main`。2 つのワークフローが**独立に**動く。
+
+| 対象 | ワークフロー | 発火条件 | 出力先 |
+|---|---|---|---|
+| フロント | `.github/workflows/deploy.yml` | main への push すべて | GitHub Pages |
+| Worker | `.github/workflows/deploy-worker.yml` | `worker/**` が変わった push、または手動実行 | Cloudflare Workers |
+
+Worker 側は `cloudflare/wrangler-action` を使い、GitHub シークレットの
+`CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` で認証する。API キーなどの
+実行時シークレット(`ANTHROPIC_API_KEY` 等)は Cloudflare 側の Secret に置き、
+リポジトリには入れない(デプロイしても消えない)。
+
+`wrangler.toml` の `name` が既存 Worker と一致しないと**別の Worker が新規作成され
+LINE ボットが無反応になる**ため、未設定(`FILL_ME_IN`)のままではワークフローが
+ガードで停止するようにしてある。初回セットアップ手順は `worker/README.md` を参照。
 
 ## 状態スキーマ(localStorage)
 
