@@ -1,9 +1,9 @@
 'use strict';
 /* triage.js — 期限切れタスクの棚卸し(毎日最初のアクセス時)
    FocusFlow の期限切れタスク(dueDate が今日より前・未完了)が1件でもあれば、
-   通常のホーム/お部屋表示に進む前にカード形式で1件ずつ「今日/明日・来週・
-   日付指定で延期/削除/あとで」を選ばせる。ゼロ件の日は何もしない。
-   公開: window.Triage.maybeStart(afterDone) */
+   タスク画面に進む前にカード形式で1件ずつ「今日/明日・来週・日付指定で延期/
+   削除/あとで」を選ばせる。ゼロ件の日は何もしない。
+   公開: window.Triage.maybeStart(afterDone) / openManually() */
 (function () {
 
 let queue = [];   // トリアージ対象タスクの id 一覧 (今回のセッション分)

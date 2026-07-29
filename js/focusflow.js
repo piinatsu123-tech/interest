@@ -1,12 +1,12 @@
 'use strict';
 /* =========================================================
-   focusflow.js — FocusFlow タスクシステム (いっしょぐらし統合版)
+   focusflow.js — FocusFlow タスクシステム (本アプリのメイン機能)
    piinatsu123-tech/focusflow1 v5.2 を移植。
    - DOM: index.html 内の #tab-tasks (メイン) と #ffx-overlays (サブ画面)
-   - データ: localStorage 'ff-tasks' (FocusFlow と同一形式)
-   - 公開: window.FFX (inline onclick と app.js 連携用)
-   - 変更点: クラス/ID に ffx- プレフィックス、save() で App.onTasksChanged()
-     通知、ヘッダー＋ボタンからの新規作成、serviceWorker 登録なし
+   - データ: localStorage 'ff-tasks' (FocusFlow と同一形式 + 手番用の order)
+   - 公開: window.FFX (inline onclick と triage.js 連携用)
+   - 変更点: クラス/ID に ffx- プレフィックス、ヘッダー＋ボタンからの新規作成、
+     serviceWorker 登録なし、今日中(must)タスクの手番の並べ替え
    ========================================================= */
 (function () {
 
@@ -65,10 +65,6 @@ let timerTick      = null;
 const uid  = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 const save = () => {
   localStorage.setItem('ff-tasks', JSON.stringify(tasks));
-  // いっしょぐらし側に変更を通知 (報酬判定・ホーム更新)
-  if (window.App && window.App.onTasksChanged) {
-    try { window.App.onTasksChanged(); } catch (e) { /* 起動順による未初期化は無視 */ }
-  }
   // Workerにアクティブタスクを同期（一覧コマンド用）
   fetch('https://divine-wildflower-8952.piinatsu123.workers.dev/sync', {
     method: 'POST',
@@ -357,8 +353,6 @@ function toggleDone(id) {
   const t = tasks.find(t => t.id === id);
   if (!t) return;
   t.done = !t.done;
-  // 完了にしたときだけ「ユーザーが完了した」と通知 (完了後お部屋へ自動移動)
-  if (t.done && window.App && App.onUserCompletedTask) App.onUserCompletedTask();
   save();
   renderMain();
   if (currentUrgency) renderGroupList();
@@ -533,7 +527,6 @@ function completeTask() {
   if (focusId) {
     const t = tasks.find(t => t.id === focusId);
     if (t) {
-      if (window.App && App.onUserCompletedTask) App.onUserCompletedTask();
       t.done = true; save(); toast('✓ タスク完了！');
     }
   }
@@ -618,22 +611,15 @@ function switchTab(tab) {
   document.getElementById('tab-all').classList.toggle('visible', tab === 'all');
   const fcPanel = document.getElementById('ffx-tab-fc');
   if (fcPanel) fcPanel.classList.toggle('visible', tab === 'fc');
-  const roomPanel = document.getElementById('ffx-tab-room');
-  if (roomPanel) roomPanel.classList.toggle('visible', tab === 'room');
   document.getElementById('tab-btn-home').classList.toggle('active', tab === 'home');
   document.getElementById('tab-btn-all').classList.toggle('active', tab === 'all');
   const fcBtn = document.getElementById('tab-btn-fc');
   if (fcBtn) fcBtn.classList.toggle('active', tab === 'fc');
-  const roomBtn = document.getElementById('tab-btn-room');
-  if (roomBtn) roomBtn.classList.toggle('active', tab === 'room');
-  // お部屋・そうじでは＋追加ボタンを隠す (タスク管理用なので)
+  // そうじでは＋追加ボタンを隠す (タスク管理用なので)
   const addBtn = document.getElementById('ffx-add-btn');
-  if (addBtn) addBtn.style.display = (tab === 'room' || tab === 'fc') ? 'none' : '';
+  if (addBtn) addBtn.style.display = (tab === 'fc') ? 'none' : '';
   if (tab === 'all') renderAllTasks();
   if (tab === 'fc' && window.FC) FC.render();
-  if (tab === 'room' && window.App && App.enterRoom) App.enterRoom();
-  // 下部ナビをこの画面に合わせて切り替え (タスク/すべて/そうじ=コンパクト、お部屋=フル)
-  if (window.App && App.refreshBottomNav) App.refreshBottomNav();
 }
 
 // ─── ALL TASKS VIEW ───────────────────────────────────────────────
@@ -898,29 +884,8 @@ function openEditScreen(id) {
   document.getElementById('editTaskTitle').value = t.title || '';
   document.getElementById('editDueDate').value = t.dueDate || '';
   document.getElementById('editScheduledDate').value = t.scheduledDate || '';
-  editCategory = t.category || null;
-  renderCategoryChips();
   renderEditSteps(t.steps || []);
   document.getElementById('ffx-screen-edit').classList.add('visible');
-}
-
-// ─── カテゴリ (パラメーター) 選択 ─────────────────────────────────
-let editCategory = null;
-
-function renderCategoryChips() {
-  const row = document.getElementById('editCategoryRow');
-  if (!row) return;
-  const params = (window.GameData && GameData.PARAMS) || [];
-  const items = [{ id: null, name: '自動' }].concat(params);
-  row.innerHTML = items.map(p =>
-    `<button class="ffx-cat-chip${(editCategory || null) === p.id ? ' active' : ''}" data-cat="${p.id || ''}">${p.name}</button>`
-  ).join('');
-  row.querySelectorAll('.ffx-cat-chip').forEach(btn => {
-    btn.addEventListener('click', () => {
-      editCategory = btn.dataset.cat || null;
-      renderCategoryChips();
-    });
-  });
 }
 
 function closeEditScreen() {
@@ -1085,7 +1050,6 @@ function saveEdit() {
   if (newTitle) t.title = newTitle;
   const newDue = document.getElementById('editDueDate').value;
   if (newDue) t.dueDate = newDue; else delete t.dueDate;
-  if (editCategory) t.category = editCategory; else delete t.category;
   const newScheduled = document.getElementById('editScheduledDate').value;
   if (newScheduled) {
     t.scheduledDate = newScheduled;

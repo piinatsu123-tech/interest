@@ -5,9 +5,7 @@
    - DOM: index.html 内の #ffx-tab-fc (そうじタブ) 内の #fc-app へ描画
    - データ: localStorage 'fc_states' / 'fc_env_list' / 'fc_reward_images' / 'fc_reward_msgs'
    - 公開: window.FC (index.html 側の onclick 委譲・focusflow.js 連携用)
-   - 変更点: CSS/DOM を .fc- プレフィックスでスコープ、フロー完了時に
-     いっしょぐらし側のコイン・親密度報酬とキャラのリアクションを発生させる
-     (App.rewardChoreComplete / App.showChoreReaction 経由)
+   - 変更点: CSS/DOM を .fc- プレフィックスでスコープ
    ========================================================= */
 (function () {
 
@@ -286,9 +284,7 @@ const FC = {
       } else {
         this.screen = 'done';
         Sound.done();
-        // いっしょぐらし側の報酬 (コイン・親密度) を付与。キャラのリアクションは
-        // ご褒美ポップアップを閉じた後 (または無ければ自動タイムアウト後) に見せる
-        if (window.App && App.rewardChoreComplete) App.rewardChoreComplete(this.event.label);
+        // ご褒美画像を登録していれば表示、無ければ完了画面を見せてから自動で戻る
         if (this.rewardImages.length > 0) {
           const idx = Math.floor(Math.random() * this.rewardImages.length);
           this.rewardUrl = this.rewardImages[idx].dataUrl;
@@ -298,7 +294,6 @@ const FC = {
           setTimeout(() => {
             this.screen = 'home'; this.state = null; this.event = null; this.step = 0;
             this.render();
-            if (window.App && App.showChoreReaction) App.showChoreReaction();
           }, 1800);
         }
         return;
@@ -308,7 +303,6 @@ const FC = {
       this.rewardUrl = null;
       this.screen = 'home';
       this.state = null; this.event = null; this.step = 0;
-      if (window.App && App.showChoreReaction) App.showChoreReaction();
 
     } else if (action === 'back') {
       if      (this.screen === 'flow')       { this.screen = 'events'; this.event = null; this.step = 0; }
