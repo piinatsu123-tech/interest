@@ -134,6 +134,10 @@ async function handleMessage(event, env) {
     return replyToLine(replyToken, `削除形式：\n定期削除 タスク名${listText}`, QR_RECURRING, env);
   }
 
+  // 汚れの記録。「記録！〜」で始まるものはタスクにせず記録だけ残す(Claude を呼ばない)
+  if (text === '記録一覧') return handleDirtList(replyToken, env);
+  if (text && DIRT_PREFIX_RE.test(text)) return handleDirtLog(replyToken, text, env);
+
   // 「写真:」プレフィックス → キャッシュして終了（タスク登録しない）
   if (event.message.type === 'text' && text?.startsWith('写真:') && event.source?.userId) {
     const instruction = text.replace(/^写真[:：]\s*/, '').trim();
@@ -391,6 +395,73 @@ function jstDateStr(date) {
   return d.toISOString().slice(0, 10);
 }
 
+/** n 日前の JST 日付文字列 */
+function jstDateStrDaysAgo(n) {
+  return jstDateStr(new Date(Date.now() + 9 * 60 * 60 * 1000 - n * 86400000));
+}
+
+// ─── 汚れの記録 ──────────────────────────────────────────────────
+// 「汚れる原因」に気づいた瞬間を記録するだけの機能。タスクには一切干渉しない。
+// 目的は「どの場面が実際に多いか」を実データで知ること。多いものが分かったら
+// 道具の配置を変えるなどの環境側の対策を打ち、習慣化したら記録をやめてよい。
+// 半角/全角の ! と、! の後ろのスペース有無をどちらも許容する。
+const DIRT_PREFIX_RE = /^記録\s*[!！]\s*/;
+const DIRT_LOG_MAX = 1000;   // KV の値サイズを抑えるため古いものから捨てる
+const DIRT_WINDOW = 14;      // 集計の対象期間(日)
+
+/** 期間内の {ラベル: 回数} を多い順に */
+function dirtCounts(log, days) {
+  const since = jstDateStrDaysAgo(days);
+  const counts = {};
+  log.filter(e => e.at >= since).forEach(e => { counts[e.text] = (counts[e.text] || 0) + 1; });
+  return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+}
+
+/** よく記録しているものをクイックリプライに出す(2回目以降はタップだけで記録できる) */
+function dirtQuickReply(log) {
+  // LINE のラベルは 20 文字までなので切る。送信テキストは全文のまま
+  const top = dirtCounts(log, 30).slice(0, 4)
+    .map(([t]) => btn(t.length > 20 ? t.slice(0, 19) + '…' : t, `記録！${t}`));
+  return { items: [...top, btn('記録一覧')] };
+}
+
+async function handleDirtLog(replyToken, rawText, env) {
+  const label = rawText.replace(DIRT_PREFIX_RE, '').trim();
+  const log = await env.TASKS.get('dirt_log', { type: 'json' }) || [];
+
+  if (!label) {
+    return replyToLine(replyToken,
+      '記録の形式：\n記録！ ふきこぼれ\n\n汚れに気づいたら送ってください。タスクにはならず、記録だけ残ります。\n\n例）\n記録！ ものをこぼした\n記録！ ゴミ袋がいっぱい\n記録！ 服を脱いだ',
+      dirtQuickReply(log), env);
+  }
+
+  log.push({ text: label, at: jstDateStr() });
+  const trimmed = log.slice(-DIRT_LOG_MAX);
+  await env.TASKS.put('dirt_log', JSON.stringify(trimmed));
+
+  const n = trimmed.filter(e => e.text === label && e.at >= jstDateStrDaysAgo(DIRT_WINDOW)).length;
+  await replyToLine(replyToken, `✓ 記録：${label}（2週間で${n}回目）`, dirtQuickReply(trimmed), env);
+}
+
+async function handleDirtList(replyToken, env) {
+  const log = await env.TASKS.get('dirt_log', { type: 'json' }) || [];
+  if (!log.length) {
+    return replyToLine(replyToken,
+      '記録はまだありません。\n\n汚れに気づいたら「記録！ ふきこぼれ」のように送ってください。2週間ためると、実際に多い場面が分かります。',
+      { items: [btn('ヘルプ')] }, env);
+  }
+  const ranked = dirtCounts(log, DIRT_WINDOW);
+  if (!ranked.length) {
+    return replyToLine(replyToken,
+      `直近2週間の記録はありません。\n（全期間の記録は ${log.length}件）`,
+      dirtQuickReply(log), env);
+  }
+  const total = ranked.reduce((s, [, c]) => s + c, 0);
+  const lines = ranked.map(([t, c]) => `・${t}　${c}回`);
+  const msg = `🧹 直近2週間の記録（${total}件）\n\n${lines.join('\n')}\n\n多いものから、道具の置き場所を変えてみてください。`;
+  await replyToLine(replyToken, msg, dirtQuickReply(log), env);
+}
+
 // ─── ヘルプ ──────────────────────────────────────────────────────
 const HELP_QR = { items: [
   btn('ヘルプ：タスク'),
@@ -406,7 +477,10 @@ const HELP_OVERVIEW = `📖 FocusFlow ヘルプ
 📝 タスク追加のコツ
 🔁 定期タスク
 🗓 休日・実行日の設定
-📋 コマンド一覧`;
+📋 コマンド一覧
+
+🧹 汚れの記録
+「記録！ ふきこぼれ」と送るとタスクにならず記録だけ残ります。「記録一覧」で多い順に集計。`;
 
 const HELP_TASK = `📝 タスク追加のコツ
 
@@ -475,6 +549,11 @@ const HELP_COMMANDS = `📋 コマンド一覧
 一覧 → 現在のタスク一覧
 定期一覧 → 定期タスク一覧
 休日一覧 → 登録済み休日一覧
+記録一覧 → 汚れの記録を多い順に
+
+【汚れの記録】
+記録！ ふきこぼれ
+→ タスクにならず記録だけ残る
 
 【定期タスク】
 定期登録 スケジュール 名前
