@@ -28,6 +28,11 @@ id = "ff5184821552468884a988d17d22c7f1"
 [triggers]
 crons = ["0 21 * * *"]
 
+# ログを保存する。リアルタイムログは「開いている間」しか見えないので、
+# LINE で試してから後で見返せるようにこちらを有効にしておく。
+[observability]
+enabled = true
+
 # ─────────────────────────────────────────────────────────────
 # シークレットはここには書かない (リポジトリは公開されているため)。
 # ANTHROPIC_API_KEY / LINE_CHANNEL_SECRET / LINE_CHANNEL_ACCESS_TOKEN は

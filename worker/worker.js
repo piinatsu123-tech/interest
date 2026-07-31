@@ -29,10 +29,22 @@ export default {
       return new Response('OK', { headers: CORS });
     }
     if (request.method === 'POST' && url.pathname === '/webhook') {
+      // シークレットが欠けていると、署名検証で例外を吐くか返信送信で TypeError に
+      // なり、「LINE が無反応・ログも出ない」という原因不明の壊れ方をする。
+      // (平文の Variable は wrangler deploy で消えるため実際に起きた)
+      // 先に検出してログと HTTP 500 で知らせる。
+      const missing = missingSecrets(env);
+      if (missing.length) {
+        console.error('[FATAL] シークレットが未設定:', missing.join(', '),
+          '→ Cloudflare の Settings → Variables and Secrets に「Secret」種別で登録してください');
+        return new Response('Missing secrets: ' + missing.join(', '), { status: 500 });
+      }
       const body = await request.text();
       const signature = request.headers.get('x-line-signature');
-      if (!await verifySignature(body, signature, env.LINE_CHANNEL_SECRET))
+      if (!await verifySignature(body, signature, env.LINE_CHANNEL_SECRET)) {
+        console.error('[ERROR] 署名検証に失敗。LINE_CHANNEL_SECRET が正しいか確認してください');
         return new Response('Unauthorized', { status: 401 });
+      }
       const data = JSON.parse(body);
       for (const event of data.events || []) {
         if (event.type !== 'message') continue;
@@ -40,7 +52,10 @@ export default {
         if (event.source?.userId) {
           ctx.waitUntil(env.TASKS.put('line_user_id', event.source.userId));
         }
-        ctx.waitUntil(handleMessage(event, env));
+        // catch を付けないと waitUntil 内の例外が握り潰されて無言で失敗する
+        ctx.waitUntil(handleMessage(event, env).catch(e => {
+          console.error('[ERROR] handleMessage 失敗:', e && (e.stack || e.message || e));
+        }));
       }
       return new Response('OK');
     }
@@ -49,9 +64,20 @@ export default {
 
   // Cron：毎朝6時JST（21:00 UTC）
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runMorningCron(env));
+    ctx.waitUntil(runMorningCron(env).catch(e => {
+      console.error('[ERROR] 朝のCron失敗:', e && (e.stack || e.message || e));
+    }));
   }
 };
+
+// ─── シークレットの検証 ──────────────────────────────────────────
+// wrangler deploy は wrangler.toml に無い「平文の Variable」を削除する。
+// 3つとも「Secret」(暗号化) として登録してあればデプロイでは消えない。
+const REQUIRED_SECRETS = ['ANTHROPIC_API_KEY', 'LINE_CHANNEL_SECRET', 'LINE_CHANNEL_ACCESS_TOKEN'];
+
+function missingSecrets(env) {
+  return REQUIRED_SECRETS.filter(k => !env[k]);
+}
 
 // ─── 朝のCron処理 ────────────────────────────────────────────────
 async function runMorningCron(env) {
@@ -110,6 +136,7 @@ async function handleMessage(event, env) {
   const replyToken = event.replyToken;
   if (event.message.type !== 'text' && event.message.type !== 'image') return;
   const text = event.message.type === 'text' ? event.message.text.trim() : null;
+  console.log('[受信]', event.message.type, text ? JSON.stringify(text.slice(0, 50)) : '');
 
   if (text === '一覧' || text === 'タスク一覧') return handleTaskList(replyToken, env);
   if (text === '定期一覧') return handleRecurringList(replyToken, env);
@@ -212,6 +239,11 @@ fmt:{"tasks":[{"id":"task_1","title":"","urgency":"must","dueDate":"YYYY-MM-DD",
     })
   });
 
+  if (!claudeRes.ok) {
+    console.error('[ERROR] Claude API', claudeRes.status, (await claudeRes.text()).slice(0, 300));
+    await replyToLine(replyToken, '処理できませんでした。もう一度送ってみてください。', QR_DEFAULT, env);
+    return;
+  }
   const claudeData = await claudeRes.json();
   const jsonText = claudeData.content[0].text.replace(/```json|```/g, '').trim();
   let newTasks;
@@ -439,6 +471,7 @@ async function handleDirtLog(replyToken, rawText, env) {
   const trimmed = log.slice(-DIRT_LOG_MAX);
   await env.TASKS.put('dirt_log', JSON.stringify(trimmed));
 
+  console.log('[記録]', label, `(2週間で${trimmed.filter(e => e.text === label && e.at >= jstDateStrDaysAgo(DIRT_WINDOW)).length}回目)`);
   const n = trimmed.filter(e => e.text === label && e.at >= jstDateStrDaysAgo(DIRT_WINDOW)).length;
   await replyToLine(replyToken, `✓ 記録：${label}（2週間で${n}回目）`, dirtQuickReply(trimmed), env);
 }
@@ -571,11 +604,14 @@ const HELP_COMMANDS = `📋 コマンド一覧
 async function replyToLine(replyToken, text, quickReply, env) {
   const message = { type: 'text', text };
   if (quickReply) message.quickReply = quickReply;
-  await fetch('https://api.line.me/v2/bot/message/reply', {
+  const res = await fetch('https://api.line.me/v2/bot/message/reply', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN.replace(/\s/g, '')}` },
     body: JSON.stringify({ replyToken, messages: [message] })
   });
+  // 失敗しても例外は出ない(fetch は 4xx でも resolve する)ので明示的に見る。
+  // 401/403 は LINE_CHANNEL_ACCESS_TOKEN が不正、400 は replyToken 期限切れなど
+  if (!res.ok) console.error('[ERROR] LINE返信失敗', res.status, (await res.text()).slice(0, 300));
 }
 
 async function pushToLine(userId, text, env) {
