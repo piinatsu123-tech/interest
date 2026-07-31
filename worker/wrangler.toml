@@ -11,7 +11,9 @@
 # ❗ name を間違えると「別の新しい Worker」が作られ、LINE の Webhook 先が
 #    切り替わらないままボットが無反応になる。必ず既存の名前と完全一致させること。
 
-name = "FILL_ME_IN"
+# 既存 Worker の URL https://divine-wildflower-8952.piinatsu123.workers.dev から。
+# (workers.dev は <Worker名>.<アカウントのサブドメイン>.workers.dev という構造)
+name = "divine-wildflower-8952"
 main = "worker.js"
 compatibility_date = "2026-01-01"
 

@@ -26,14 +26,17 @@ main に push すると自動でデプロイ**される。フロント (GitHub P
 
 ### 1. `wrangler.toml` の `FILL_ME_IN` を埋める
 
+残っているのは KV の `id` だけ。`name` は既存 Worker の URL から判明済み
+(`https://divine-wildflower-8952.piinatsu123.workers.dev` → `divine-wildflower-8952`)。
+
 | 項目 | どこで確認するか |
 |---|---|
-| `name` | Cloudflare → Workers & Pages → 対象 Worker。URL `https://<name>.<subdomain>.workers.dev` の `<name>` 部分 |
-| `[[kv_namespaces]]` の `id` | Cloudflare → Storage & Databases → KV → 対象ネームスペースの **Namespace ID** |
+| `[[kv_namespaces]]` の `id` | Cloudflare → Storage & Databases → **KV** → 対象ネームスペースの **Namespace ID**<br>または `npx wrangler kv namespace list`(要 `wrangler login`) |
 
-> ❗ **`name` は既存の Worker と完全一致させること。** 違う名前でデプロイすると
+> ❗ **`name` は既存の Worker と完全一致していること。** 違う名前でデプロイすると
 > 別の新しい Worker が作られ、LINE の Webhook 先は古い Worker のままなので
-> **ボットが無反応になる**。
+> **ボットが無反応になる**。初回デプロイ前に Workers & Pages の一覧に
+> `divine-wildflower-8952` があることを目視で確認しておくと確実。
 
 ### 2. Cloudflare の API トークンを作る
 
