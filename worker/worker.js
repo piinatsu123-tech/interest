@@ -457,8 +457,18 @@ function dirtQuickReply(log) {
   return { items: [...top, btn('記録一覧')] };
 }
 
+/** 保存前の正規化。決定的に潰せるゆれだけを対象にする
+    (全角/半角、連続スペース、末尾の句読点・記号)。
+    ひらがな/漢字/カタカナや言い回しの違いは、集計時に AI でまとめる */
+function normalizeDirtLabel(s) {
+  return s.normalize('NFKC')          // ｺﾞﾐ → ゴミ、１ → 1 など
+    .replace(/\s+/g, ' ')             // 連続スペースを1つに
+    .replace(/^[\s。、,.]+|[\s。、,.!！?？~〜ー]+$/g, '')  // 前後の空白・句読点・記号
+    .trim();
+}
+
 async function handleDirtLog(replyToken, rawText, env) {
-  const label = rawText.replace(DIRT_PREFIX_RE, '').trim();
+  const label = normalizeDirtLabel(rawText.replace(DIRT_PREFIX_RE, ''));
   const log = await env.TASKS.get('dirt_log', { type: 'json' }) || [];
 
   if (!label) {
@@ -476,6 +486,52 @@ async function handleDirtLog(replyToken, rawText, env) {
   await replyToLine(replyToken, `✓ 記録：${label}（2週間で${n}回目）`, dirtQuickReply(trimmed), env);
 }
 
+/** 表記ゆれを AI でまとめる。[[代表名, 合計回数, [元の表記...]], ...] を返す。
+    失敗時は null を返し、呼び出し側は素の集計にフォールバックする。
+    生ログは書き換えないので、まとめ方が気に入らなくても記録自体は失われない */
+async function groupDirtLabels(ranked, env) {
+  const labels = ranked.map(([t]) => t);
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1000,
+        system: `role:表記ゆれの統合|out:JSONのみ・前置き不要
+同一の事象を指すものだけをまとめる。ひらがな/漢字/カタカナ違い、送り仮名・助詞の有無、語尾違いは同一とみなす
+例:"ふきこぼれ"="吹きこぼれ"="フキコボレ"|"服を脱いだ"="服脱いだ"|"ゴミ袋がいっぱい"="ごみ袋いっぱい"
+NG:場所や対象が違うものは絶対にまとめない("床を拭く"と"机を拭く"は別)
+name:そのグループで最初に出てくる表記をそのまま使う
+入力の全要素をどれかのグループに必ず入れる(取りこぼし禁止)
+fmt:{"groups":[{"name":"","members":[""]}]}`,
+        messages: [{ role: 'user', content: JSON.stringify(labels) }]
+      })
+    });
+    if (!res.ok) {
+      console.error('[ERROR] 表記ゆれ統合のAPI失敗', res.status, (await res.text()).slice(0, 200));
+      return null;
+    }
+    const data = await res.json();
+    const groups = JSON.parse(data.content[0].text.replace(/```json|```/g, '').trim()).groups || [];
+    const countOf = Object.fromEntries(ranked);
+    const used = new Set();
+    const out = [];
+    for (const g of groups) {
+      const members = (g.members || []).filter(m => countOf[m] !== undefined && !used.has(m));
+      if (!members.length) continue;
+      members.forEach(m => used.add(m));
+      out.push([g.name || members[0], members.reduce((s, m) => s + countOf[m], 0), members]);
+    }
+    // AI が取りこぼした分は素のまま足す(件数が合わなくなるのを防ぐ)
+    for (const [t, c] of ranked) if (!used.has(t)) out.push([t, c, [t]]);
+    return out.sort((a, b) => b[1] - a[1]);
+  } catch (e) {
+    console.error('[ERROR] 表記ゆれ統合に失敗:', e && (e.message || e));
+    return null;
+  }
+}
+
 async function handleDirtList(replyToken, env) {
   const log = await env.TASKS.get('dirt_log', { type: 'json' }) || [];
   if (!log.length) {
@@ -490,7 +546,11 @@ async function handleDirtList(replyToken, env) {
       dirtQuickReply(log), env);
   }
   const total = ranked.reduce((s, [, c]) => s + c, 0);
-  const lines = ranked.map(([t, c]) => `・${t}　${c}回`);
+  // 「ふきこぼれ/吹きこぼれ」のような表記ゆれを AI でまとめる。
+  // 失敗しても集計自体は出せるよう、そのままの一覧にフォールバックする
+  const grouped = ranked.length > 1 ? await groupDirtLabels(ranked, env) : null;
+  const lines = (grouped || ranked).map(([t, c, variants]) =>
+    `・${t}　${c}回` + (variants && variants.length > 1 ? `\n　（${variants.join(' / ')}）` : ''));
   const msg = `🧹 直近2週間の記録（${total}件）\n\n${lines.join('\n')}\n\n多いものから、道具の置き場所を変えてみてください。`;
   await replyToLine(replyToken, msg, dirtQuickReply(log), env);
 }
