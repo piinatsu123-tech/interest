@@ -1,7 +1,6 @@
 # Cloudflare Worker の設定 (LINE ボット + AI タスク分解 + 定期タスク/朝の通知)
 #
-# ⚠️ FILL_ME_IN の箇所は Cloudflare ダッシュボードの実際の値に置き換えること。
-#    置き換えないと GitHub Actions がガードで停止する (誤ったデプロイを防ぐため)。
+# 設定値は既存 Worker のものに合わせてある(Worker 名は URL から、KV の id はダッシュボードから)。
 #
 # 取得場所:
 #   name        … Workers & Pages → 対象 Worker の名前 (URL の
@@ -23,7 +22,7 @@ workers_dev = true
 # タスク・定期タスク・休日・LINE ユーザー ID の保存先
 [[kv_namespaces]]
 binding = "TASKS"
-id = "FILL_ME_IN"
+id = "ff5184821552468884a988d17d22c7f1"
 
 # 毎朝 6:00 JST (= 21:00 UTC) に定期タスクの投入と実行日タスクの通知
 [triggers]
