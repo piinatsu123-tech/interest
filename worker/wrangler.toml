@@ -1,0 +1,46 @@
+# Cloudflare Worker の設定 (LINE ボット + AI タスク分解 + 定期タスク/朝の通知)
+#
+# 設定値は既存 Worker のものに合わせてある(Worker 名は URL から、KV の id はダッシュボードから)。
+#
+# 取得場所:
+#   name        … Workers & Pages → 対象 Worker の名前 (URL の
+#                 https://<name>.<subdomain>.workers.dev の <name> 部分)
+#   KV の id    … Storage & Databases → KV → 対象ネームスペースの Namespace ID
+#
+# ❗ name を間違えると「別の新しい Worker」が作られ、LINE の Webhook 先が
+#    切り替わらないままボットが無反応になる。必ず既存の名前と完全一致させること。
+
+# 既存 Worker の URL https://divine-wildflower-8952.piinatsu123.workers.dev から。
+# (workers.dev は <Worker名>.<アカウントのサブドメイン>.workers.dev という構造)
+name = "divine-wildflower-8952"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# workers.dev のサブドメインを使い続ける (LINE Webhook の URL を変えないため)
+workers_dev = true
+
+# タスク・定期タスク・休日・LINE ユーザー ID の保存先
+[[kv_namespaces]]
+binding = "TASKS"
+id = "ff5184821552468884a988d17d22c7f1"
+
+# 毎朝 6:00 JST (= 21:00 UTC) に定期タスクの投入と実行日タスクの通知
+[triggers]
+crons = ["0 21 * * *"]
+
+# ログを保存する。リアルタイムログは「開いている間」しか見えないので、
+# LINE で試してから後で見返せるようにこちらを有効にしておく。
+[observability]
+enabled = true
+
+# ─────────────────────────────────────────────────────────────
+# シークレットはここには書かない (リポジトリは公開されているため)。
+# ANTHROPIC_API_KEY / LINE_CHANNEL_SECRET / LINE_CHANNEL_ACCESS_TOKEN は
+# Cloudflare 側の Secret として保持され、wrangler deploy でも消えない。
+#
+# 確認/設定:
+#   ダッシュボード → 対象 Worker → Settings → Variables and Secrets
+#   (「Secret」種別であること。平文の Variable だとデプロイ時に消える可能性がある)
+# CLI から入れる場合:
+#   npx wrangler secret put ANTHROPIC_API_KEY
+# ─────────────────────────────────────────────────────────────

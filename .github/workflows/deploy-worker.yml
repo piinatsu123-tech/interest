@@ -1,0 +1,37 @@
+name: Deploy Worker to Cloudflare
+
+# worker/ 配下が変わったときだけ動く。フロント(GitHub Pages)のデプロイとは独立。
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'worker/**'
+      - '.github/workflows/deploy-worker.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 設定が埋まっていない状態でデプロイすると、名前違いの Worker が
+      # 新規作成されて LINE ボットが無反応になる。事前に止める。
+      - name: Check wrangler.toml is configured
+        run: |
+          if grep -q 'FILL_ME_IN' worker/wrangler.toml; then
+            echo "::error file=worker/wrangler.toml::worker/wrangler.toml に FILL_ME_IN が残っています。Worker 名と KV の Namespace ID を Cloudflare ダッシュボードの実際の値に置き換えてください (手順: worker/README.md)"
+            exit 1
+          fi
+
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
