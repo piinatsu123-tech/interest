@@ -885,6 +885,11 @@ input, textarea { font-family: inherit; }
 
 /* ── EDIT SCREEN ── */
 .edit-section { padding: 20px 20px 0; }
+/* 見出しの右に「並べ替え」ボタンを並べる行 */
+.edit-section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
 .edit-section-label {
   font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
   color: var(--text3); text-transform: uppercase; margin-bottom: 10px;
@@ -1014,6 +1019,14 @@ input, textarea { font-family: inherit; }
   z-index: 1;
 }
 .step-list-card-text { flex: 1; font-size: 16px; color: var(--text); line-height: 1.4; }
+/* 並べ替え中に振られる番号 (①②③…)。未タップは「・」を薄く出す */
+.step-list-card-order {
+  font-size: 22px; font-weight: 700; color: var(--text);
+  flex-shrink: 0; width: 26px; text-align: center; line-height: 1;
+}
+/* タップ済みのハイライト。不透明色で指定すること
+   (半透明にするとカードの下のスワイプ削除用の赤い背景が透ける) */
+.step-list-card.reorder-tapped { background: #f9e6e6; }
 .step-list-card-meta { font-size: 13px; color: var(--text3); white-space: nowrap; }
 .step-list-card-arrow { font-size: 20px; color: var(--text3); flex-shrink: 0; }
 

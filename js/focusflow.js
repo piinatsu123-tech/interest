@@ -887,11 +887,13 @@ function openEditScreen(id) {
   document.getElementById('editTaskTitle').value = t.title || '';
   document.getElementById('editDueDate').value = t.dueDate || '';
   document.getElementById('editScheduledDate').value = t.scheduledDate || '';
+  resetStepReorder(false);   // 前のタスクの並べ替えを持ち越さない
   renderEditSteps(t.steps || []);
   document.getElementById('ffx-screen-edit').classList.add('visible');
 }
 
 function closeEditScreen() {
+  resetStepReorder(true);   // 並べ替え中に閉じてもタップ済み分は確定する
   // タイトル未入力・ステップなしの空タスク (新規作成の取りやめ等) は捨てる
   const t = tasks.find(t => t.id === editId);
   if (t && !(t.title || '').trim() && !(t.steps || []).some(s => stepLabel(s))) {
@@ -919,6 +921,10 @@ function allCardClick(id) {
 
 function renderEditSteps(steps) {
   const el = document.getElementById('stepEditList');
+  // 1つしかなければ並べ替えるものがない
+  const btn = document.getElementById('stepReorderBtn');
+  if (btn) btn.classList.toggle('hidden', steps.length < 2);
+
   if (!steps.length) {
     el.innerHTML = `<div style="color:var(--text3);font-size:14px;padding:8px 0;">ステップがありません</div>`;
     return;
@@ -926,19 +932,82 @@ function renderEditSteps(steps) {
   el.innerHTML = steps.map((s, i) => {
     const text = stepLabel(s) || '（未入力）';
     const mins = stepMinutes(s);
+    let order = '';
+    if (stepReorderMode) {
+      const n = stepTapSeq.indexOf(i);
+      order = n === -1
+        ? `<div class="step-list-card-order task-card-order-pending">・</div>`
+        : `<div class="step-list-card-order">${circledNumber(n + 1)}</div>`;
+    }
+    const tapped = stepReorderMode && stepTapSeq.includes(i) ? ' reorder-tapped' : '';
+    const click  = stepReorderMode ? `FFX.stepReorderTap(${i})` : `FFX.openStepDetail(${i})`;
     return `<div class="swipe-container" data-step-idx="${i}">
       <div class="delete-bg">削除</div>
-      <div class="step-list-card" onclick="FFX.openStepDetail(${i})">
+      <div class="step-list-card${tapped}" onclick="${click}">
+        ${order}
         <div class="step-list-card-text">${esc(text)}</div>
         ${mins ? `<div class="step-list-card-meta">${mins}分</div>` : ''}
-        <div class="step-list-card-arrow">›</div>
+        ${stepReorderMode ? '' : '<div class="step-list-card-arrow">›</div>'}
       </div>
     </div>`;
   }).join('');
   addStepSwipeListeners();
 }
 
+// ─── ステップの並べ替え ───────────────────────────────────────────
+// タスクの並べ替え (toggleReorderMode) と同じ「タップした順に番号を振る」方式。
+// steps は配列の順序がそのまま実行順なので、確定時に配列を並べ替える。
+let stepReorderMode = false;
+let stepTapSeq      = [];   // タップした順のステップ index
+
+/** 「並べ替え」⇔「完了」を切り替える。完了時にタップ順を steps に反映する */
+function toggleStepReorder() {
+  const t = tasks.find(t => t.id === editId);
+  if (!t) return;
+  if (stepReorderMode) finalizeStepReorder();
+  else { stepReorderMode = true; stepTapSeq = []; }
+
+  const btn = document.getElementById('stepReorderBtn');
+  if (btn) {
+    btn.textContent = stepReorderMode ? '完了' : '並べ替え';
+    btn.classList.toggle('active', stepReorderMode);
+  }
+  renderEditSteps(t.steps || []);
+}
+
+/** 並べ替え中にステップをタップ: 次の番号を振る (タップ済みなら末尾に振り直し) */
+function stepReorderTap(i) {
+  if (!stepReorderMode) return;
+  stepTapSeq = stepTapSeq.filter(x => x !== i);
+  stepTapSeq.push(i);
+  const t = tasks.find(t => t.id === editId);
+  if (t) renderEditSteps(t.steps || []);
+}
+
+/** タップした順に並べ替える。タップされなかった分は元の相対順のまま後ろに続く */
+function finalizeStepReorder() {
+  stepReorderMode = false;
+  const t = tasks.find(t => t.id === editId);
+  if (!t || !stepTapSeq.length) { stepTapSeq = []; return; }
+  const tapped   = stepTapSeq.map(i => t.steps[i]).filter(Boolean);
+  const untapped = t.steps.filter((s, i) => !stepTapSeq.includes(i));
+  t.steps = [...tapped, ...untapped];
+  stepTapSeq = [];
+  save();
+}
+
+/** 並べ替えモードを畳む (編集画面を開くとき/閉じるとき) */
+function resetStepReorder(finalize) {
+  if (stepReorderMode && finalize) finalizeStepReorder();
+  stepReorderMode = false;
+  stepTapSeq = [];
+  const btn = document.getElementById('stepReorderBtn');
+  if (btn) { btn.textContent = '並べ替え'; btn.classList.remove('active'); }
+}
+
 function addStepSwipeListeners() {
+  // 並べ替え中に削除されると index がずれて stepTapSeq が壊れるので無効化する
+  if (stepReorderMode) return;
   document.querySelectorAll('#stepEditList .swipe-container').forEach(container => {
     const card = container.querySelector('.step-list-card');
     let startX = 0, startY = 0, curX = 0, swiping = false;
@@ -976,6 +1045,7 @@ function addStepSwipeListeners() {
 function addEditStep() {
   const t = tasks.find(t => t.id === editId);
   if (!t) return;
+  resetStepReorder(true);   // 追加すると index がずれるので並べ替えは先に確定
   t.steps.push({ text: '', done: false, estimatedMinutes: 0 });
   save();
   renderEditSteps(t.steps);
@@ -1188,6 +1258,7 @@ window.FFX = {
   // inline onclick 用
   switchTab, showGroup, goBack, selectTask, toggleDone, toggleDeleteMode,
   toggleReorderMode, reorderTap,
+  toggleStepReorder, stepReorderTap,
   toggleTimer, startStep, advanceStep, completeTask, showStepList,
   openEditScreen, closeEditScreen, openNewTask, allCardClick,
   openStepDetail, openStepDetailFrom, closeStepDetail, saveStepDetail, deleteFromStepDetail,

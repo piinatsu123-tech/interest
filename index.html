@@ -221,7 +221,10 @@
       <input class="edit-due-input" id="editScheduledDate" type="date">
     </div>
     <div class="edit-section" style="margin-top:20px;">
-      <div class="edit-section-label">ステップ</div>
+      <div class="edit-section-head">
+        <div class="edit-section-label" style="margin-bottom:0;">ステップ</div>
+        <button class="group-edit-btn hidden" id="stepReorderBtn" onclick="FFX.toggleStepReorder()">並べ替え</button>
+      </div>
       <button class="add-step-btn" onclick="FFX.addEditStep()" style="margin-bottom:8px;">＋ ステップを追加</button>
       <div class="step-edit-list" id="stepEditList"></div>
     </div>
