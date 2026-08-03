@@ -165,49 +165,65 @@ async function handleMessage(event, env) {
   if (text === '記録一覧') return handleDirtList(replyToken, env);
   if (text && DIRT_PREFIX_RE.test(text)) return handleDirtLog(replyToken, text, env);
 
-  // 「写真:」プレフィックス → キャッシュして終了（タスク登録しない）
+  // 「写真:」プレフィックス → 先に指示を預かる(この時点ではタスクにしない)
   if (event.message.type === 'text' && text?.startsWith('写真:') && event.source?.userId) {
     const instruction = text.replace(/^写真[:：]\s*/, '').trim();
     await env.TASKS.put(
       `text_ctx_${event.source.userId}`,
       JSON.stringify({ text: instruction, timestamp: Date.now() }),
-      { expirationTtl: 120 }
+      { expirationTtl: PHOTO_CTX_TTL }
     );
     return replyToLine(replyToken,
-      `📷 指示を受け取りました：「${instruction}」\n60秒以内に写真を送ってください。`,
+      `📷 指示を受け取りました：「${instruction}」\n${PHOTO_CTX_TTL / 60}分以内に写真を送ってください。`,
       { items: [btn('ヘルプ')] }, env);
   }
 
-  // 通常タスク追加（Claude API）
-  let userContent;
-  if (event.message.type === 'text') {
-    userContent = [{ type: 'text', text }];
-  } else {
-    const imageRes = await fetch(
-      `https://api-data.line.me/v2/bot/message/${event.message.id}/content`,
-      { headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN.replace(/\s/g, '')}` } }
-    );
-    const imageData = await imageRes.arrayBuffer();
-    const uint8 = new Uint8Array(imageData);
-    let binary = '';
-    for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
-    const base64 = btoa(binary);
+  // 「補足:」→ 直前に送った写真を、補足を加えて解析し直す。
+  // 写真を送ってから内容を見て直せるので、事前に指示を考えておく必要がない
+  if (event.message.type === 'text' && DIRT_SUPPLEMENT_RE.test(text || '') && event.source?.userId) {
+    const supplement = text.replace(DIRT_SUPPLEMENT_RE, '').trim();
+    const ctx = await env.TASKS.get(`photo_ctx_${event.source.userId}`, { type: 'json' });
+    if (!ctx) {
+      return replyToLine(replyToken,
+        `補足できる写真がありません。\n写真を送ってから${PHOTO_CTX_TTL / 60}分以内に「補足: 〜」と送ってください。`,
+        QR_DEFAULT, env);
+    }
+    if (!supplement) {
+      return replyToLine(replyToken, '補足の内容を書いてください。\n例）補足: 床だけでいい', QR_DEFAULT, env);
+    }
+    return analyzeImage(replyToken, ctx.messageId,
+      `${supplement}\n\nこの指示を最優先で、この画像を見てタスクに分解してください。`,
+      env, event.source.userId, ctx.batchId);
+  }
 
-    // 「写真:」で事前に送られた指示があれば使う
-    let instruction = 'この画像を見て、対処すべきことをタスクに分解してください。';
+  // 画像 → 「写真:」で事前に預けた指示があればそれを使う
+  if (event.message.type === 'image') {
+    let instruction = DEFAULT_IMAGE_INSTRUCTION;
     if (event.source?.userId) {
       const cached = await env.TASKS.get(`text_ctx_${event.source.userId}`, { type: 'json' });
-      if (cached && Date.now() - cached.timestamp < 60000) {
-        instruction = `${cached.text}\n\nこの指示に基づいて、この画像を見てタスクに分解してください。`;
+      if (cached && Date.now() - cached.timestamp < PHOTO_CTX_TTL * 1000) {
+        instruction = `${cached.text}\n\nこの指示を最優先で、この画像を見てタスクに分解してください。`;
         await env.TASKS.delete(`text_ctx_${event.source.userId}`);
       }
     }
-    userContent = [
-      { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
-      { type: 'text', text: instruction }
-    ];
+    return analyzeImage(replyToken, event.message.id, instruction, env, event.source?.userId, null);
   }
 
+  // 通常タスク追加（Claude API）
+  const newTasks = await askClaudeForTasks([{ type: 'text', text }], env);
+  if (!newTasks) {
+    await replyToLine(replyToken, '処理できませんでした。もう一度送ってみてください。', QR_DEFAULT, env);
+    return;
+  }
+  await addTasksAndReply(replyToken, newTasks, env, null, null);
+}
+
+// ─── Claude にタスク分解を依頼する ───────────────────────────────
+/**
+ * userContent は Claude の content 配列そのまま（テキストのみ / 画像+テキスト）。
+ * 成功したらタスク配列、API エラーや JSON 破損なら null を返す。
+ */
+async function askClaudeForTasks(userContent, env) {
   const today = jstDateStr();
   const holidays = await env.TASKS.get('holidays', { type: 'json' }) || [];
   const futureHolidays = holidays.filter(d => d >= today).sort();
@@ -222,8 +238,11 @@ async function handleMessage(event, env) {
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 3000,
       system: `role:タスク管理AI|out:JSONのみ・前置き不要|date:${today}${holidayPrompt}
-title:ユーザーが書いた言葉をそのまま使う。別のタスクに置き換えない
-task_n:原則1件。「AとBとCのX」のAとBとCはXの修飾であってタスクの列挙ではない→"X"1件にする。述語(最後の動詞)が何を求めているかで判断。動詞が複数あり明確に別件の時だけ複数件
+title:ユーザーが書いた言葉をそのまま使う。別のタスクに置き換えない(画像のみの場合は自分で付ける)
+task_n(文章の場合):原則1件。「AとBとCのX」のAとBとCはXの修飾であってタスクの列挙ではない→"X"1件にする。述語(最後の動詞)が何を求めているかで判断。動詞が複数あり明確に別件の時だけ複数件
+画像がある場合:上のtask_n(原則1件)は適用しない。写っている範囲から対処すべきことを漏れなく全部挙げる
+ 何がどこにあるかを具体的に(✗"床を片付ける" ✓"床の雑誌を棚に戻す")|見えないもの・写っていないことは推測しない
+ 文章が併記されていればそれを最優先の指示として扱う(範囲の限定・優先順位・やらないことの指定など)
 思考タスク:"考える/決める/計画/設計/検討/見直す"はその思考作業自体が1タスク。中身を実行タスクに展開するのは禁止(まだやると決まっていないため)。stepは思考の進め方にする
  ex:"AとBとCのスケジュールを考える"→✗"Aを実施","Bを追加","Cを暗記"の3タスク化
   ✓"スケジュールを考える"1件|step:"紙とペンを出す","A/B/Cそれぞれの所要時間を書き出す","今週の空き時間を確認する","カレンダーに書き込む"
@@ -246,20 +265,74 @@ fmt:{"tasks":[{"id":"task_1","title":"","urgency":"must","dueDate":"YYYY-MM-DD",
 
   if (!claudeRes.ok) {
     console.error('[ERROR] Claude API', claudeRes.status, (await claudeRes.text()).slice(0, 300));
-    await replyToLine(replyToken, '処理できませんでした。もう一度送ってみてください。', QR_DEFAULT, env);
-    return;
+    return null;
   }
-  const claudeData = await claudeRes.json();
-  const jsonText = claudeData.content[0].text.replace(/```json|```/g, '').trim();
-  let newTasks;
-  try { newTasks = JSON.parse(jsonText).tasks || []; }
-  catch {
-    await replyToLine(replyToken, '処理できませんでした。もう一度送ってみてください。', QR_DEFAULT, env);
-    return;
+  try {
+    const claudeData = await claudeRes.json();
+    const jsonText = claudeData.content[0].text.replace(/```json|```/g, '').trim();
+    return JSON.parse(jsonText).tasks || [];
+  } catch (e) {
+    console.error('[ERROR] Claude の応答を解釈できない:', e && (e.message || e));
+    return null;
   }
+}
 
-  // 全タスクをpendingに追加（scheduledも含む）
-  const existing = await env.TASKS.get('pending', { type: 'json' }) || [];
+// ─── 画像の解析 ──────────────────────────────────────────────────
+const PHOTO_CTX_TTL = 300;                       // 写真の指示/補足を受け付ける秒数
+const DIRT_SUPPLEMENT_RE = /^補足\s*[:：]\s*/;
+const DEFAULT_IMAGE_INSTRUCTION =
+  '写っている範囲を見て、片付け・掃除が必要な箇所を漏れなく全部挙げ、タスクに分解してください。';
+
+/** LINE から画像を取得して base64 に */
+async function fetchLineImage(messageId, env) {
+  const res = await fetch(`https://api-data.line.me/v2/bot/message/${messageId}/content`,
+    { headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN.replace(/\s/g, '')}` } });
+  if (!res.ok) {
+    console.error('[ERROR] LINE画像の取得に失敗', res.status);
+    return null;
+  }
+  const uint8 = new Uint8Array(await res.arrayBuffer());
+  let binary = '';
+  for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
+  return btoa(binary);
+}
+
+/** 画像を解析してタスクを追加。replaceBatchId があれば、その回の結果を差し替える */
+async function analyzeImage(replyToken, messageId, instruction, env, userId, replaceBatchId) {
+  const base64 = await fetchLineImage(messageId, env);
+  if (!base64) {
+    return replyToLine(replyToken, '画像を取得できませんでした。もう一度送ってみてください。', QR_DEFAULT, env);
+  }
+  console.log('[画像解析]', replaceBatchId ? '補足で再解析' : '新規', JSON.stringify(instruction.slice(0, 60)));
+  const newTasks = await askClaudeForTasks([
+    { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
+    { type: 'text', text: instruction }
+  ], env);
+  if (!newTasks) {
+    return replyToLine(replyToken, '処理できませんでした。もう一度送ってみてください。', QR_DEFAULT, env);
+  }
+  // 補足で解析し直せるよう、この写真と今回追加したタスクを紐づけて覚えておく
+  const batchId = 'img' + Date.now();
+  if (userId) {
+    await env.TASKS.put(`photo_ctx_${userId}`,
+      JSON.stringify({ messageId, batchId, timestamp: Date.now() }), { expirationTtl: PHOTO_CTX_TTL });
+  }
+  await addTasksAndReply(replyToken, newTasks, env, batchId, replaceBatchId);
+}
+
+/** pending に追加して結果を返信する。replaceBatchId 指定時は前回分を取り除く */
+async function addTasksAndReply(replyToken, newTasks, env, batchId, replaceBatchId) {
+  if (batchId) newTasks.forEach((t, i) => { t.id = `${batchId}_${i}`; });
+  let existing = await env.TASKS.get('pending', { type: 'json' }) || [];
+  let note = '';
+  if (replaceBatchId) {
+    const before = existing.length;
+    existing = existing.filter(t => !String(t.id || '').startsWith(replaceBatchId));
+    // アプリが既に取り込んでいると pending には残っていない。その場合は差し替えられない
+    note = before === existing.length
+      ? '\n\n⚠️ 前回分は既にアプリに取り込まれていたため、置き換えずに追加しました。アプリ側で不要なものを削除してください。'
+      : '\n\n（前回の解析結果は置き換えました）';
+  }
   await env.TASKS.put('pending', JSON.stringify([...existing, ...newTasks]));
 
   const todayTasks = newTasks.filter(t => t.urgency !== 'scheduled');
@@ -273,8 +346,12 @@ fmt:{"tasks":[{"id":"task_1","title":"","urgency":"must","dueDate":"YYYY-MM-DD",
     if (replyMsg) replyMsg += '\n\n';
     replyMsg += `📅 後日実行予定に追加しました\n${futureTasks.map(t => `・${t.title}（${t.scheduledDate}）`).join('\n')}`;
   }
+  if (!replyMsg) replyMsg = 'タスクは見つかりませんでした。';
+  if (batchId && !replaceBatchId) {
+    replyMsg += '\n\n💡 直したいときは「補足: 床だけでいい」のように送ると解析し直します。';
+  }
 
-  await replyToLine(replyToken, replyMsg, QR_TASK, env);
+  await replyToLine(replyToken, replyMsg + note, QR_TASK, env);
 }
 
 // ─── コマンド：タスク一覧 ────────────────────────────────────────
@@ -587,8 +664,15 @@ const HELP_TASK = `📝 タスク追加のコツ
 【写真だけ送る】
 画像を解析してタスクを自動生成します
 
-【写真に指示を付けたいとき】
-先に「写真: 〇〇」と送ってから60秒以内に写真を送る
+【解析結果を直したいとき】← おすすめ
+写真を送ったあと5分以内に「補足: 〇〇」と送ると、
+その指示を最優先にして解析し直し、前回分を置き換えます
+例）補足: 床だけでいい
+　　補足: テーブルの上は触らない
+　　補足: 洗い物を先にやりたい
+
+【最初から指示を付けたいとき】
+先に「写真: 〇〇」と送ってから5分以内に写真を送る
 例）「写真: 優先してやりたいことを3つ出して」→ 写真
 
 【期限を設定したいとき】
@@ -652,6 +736,10 @@ const HELP_COMMANDS = `📋 コマンド一覧
 【汚れの記録】
 記録！ ふきこぼれ
 → タスクにならず記録だけ残る
+
+【写真】
+写真: 〇〇 → このあと送る写真への指示
+補足: 〇〇 → 直前の写真を指示付きで解析し直す
 
 【定期タスク】
 定期登録 スケジュール 名前
