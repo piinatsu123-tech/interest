@@ -250,23 +250,25 @@ async function askClaudeForTasks(userContent, env) {
       system: `role:タスク管理AI|out:JSONのみ・前置き不要|date:${today}${holidayPrompt}
 title:ユーザーが書いた言葉をそのまま使う。別のタスクに置き換えない(画像のみの場合は場所の名前で自分で付ける)
 task_n(文章の場合):原則1件。「AとBとCのX」のAとBとCはXの修飾であってタスクの列挙ではない→"X"1件にする。述語(最後の動詞)が何を求めているかで判断。動詞が複数あり明確に別件の時だけ複数件
-画像がある場合:タスクは写っている場所ごとに1件。場所の名前を付ける(ex:"リビングの片付け")
- ✗場所の中を分割して"ソファの片付け","床の片付け","テーブルの片付け"と複数タスクにする
- ✓"リビングの片付け"1件にして、ソファ/床/テーブルはその中のstepにする
- 明らかに種類の違う作業(ex:洗い物と洗濯)が写っている時だけタスクを分ける
- 漏れなく全部挙げるのはstep側でやる。写っている対処すべき箇所をstepとして全部書く(step数は目安3〜8を超えてよい。上限12)
- 何がどこにあるかを具体的に(✗"床を片付ける" ✓"床の雑誌を棚に戻す")
- 物は種類ごとにまとめる。1つ1つを個別に挙げない(✗"雑誌Aを戻す","雑誌Bを戻す" ✓"床の雑誌を棚に戻す")
-写っていないものは書かない(最重要):
- 各stepは必ず「どこにある何か」で始める。写真のどこにあるか言えない物は書いてはいけない
- はっきり見えている物だけ。ぼやけて何か分からない物、一部しか見えていない物は挙げない
- 一般的な部屋にありそう、という理由で書かない。推測・想像で足すのは禁止
- 迷ったら書かない。挙げる数が少なくなるのは構わない。写っていない物を挙げる方が悪い
- 置き場所(着点)が写っていない時は"元の場所に戻す"でよい。存在しない収納を作らない
-step同士を重ねない:
- 同じ物が2つのstepに出てきてはいけない。広いstepと細かいstepを混ぜない
- ✗"床を片付ける"と"床の雑誌を棚に戻す"が両方ある ✓細かい方だけ残す
- 文章が併記されていればそれを最優先の指示として扱う(範囲の限定・優先順位・やらないことの指定など)
+画像がある場合:
+ ■タスクは必ず1件。写っている場所の名前を付ける(ex:"リビングの片付け")。placeに場所名だけ入れる
+  ✗"ソファの片付け","床の片付け","テーブルの片付け"と分ける ✓"リビングの片付け"1件。ソファ/床/テーブルはstep
+  道具も置き場所も違う作業(ex:洗い物と洗濯)が同時に写っている時だけ2件まで。それ以外は必ず1件
+ ■stepは「物の種類」ごとに1つ。同じ種類の物が何個あってもstepは1つ。散らかっていてもstepは増えない
+  ✗"花柄の服を洗濯かごに入れる","ピンクの服を洗濯かごに入れる" ✓"床に落ちている服を洗濯かごに入れる"
+  色/柄/素材/ブランド/サイズでstepを分けない。これらの語をstepに書かない
+  ✗"雑誌Aを戻す","雑誌Bを戻す" ✓"床の雑誌を棚に戻す"
+  何がどこにあるかは具体的に(✗"床を片付ける" ✓"床の雑誌を棚に戻す")
+ ■写っていないものは書かない(最重要)
+  各stepは必ず「どこにある何か」で始める。写真のどこにあるか言えない物は書いてはいけない
+  はっきり見えている物だけ。ぼやけて何か分からない物、一部しか見えていない物は挙げない
+  一般的な部屋にありそう、という理由で書かない。推測・想像で足すのは禁止
+  迷ったら書かない。挙げる数が少なくなるのは構わない。写っていない物を挙げる方が悪い
+  置き場所(着点)が写っていない時は"元の場所に戻す"でよい。存在しない収納を作らない
+ ■step同士を重ねない。同じ物が2つのstepに出てきてはいけない
+  広いstepと細かいstepを混ぜない ✗"床を片付ける"と"床の雑誌を棚に戻す"が両方 ✓細かい方だけ
+ ■文章が併記されていればそれを最優先の指示として扱う(範囲の限定・優先順位・やらないことの指定など)
+ ■出力する前に確認:タスクは1件か?|色/柄/素材の語がstepに入っていないか?|同じ種類が2stepに分かれていないか?
 思考タスク:"考える/決める/計画/設計/検討/見直す"はその思考作業自体が1タスク。中身を実行タスクに展開するのは禁止(まだやると決まっていないため)。stepは思考の進め方にする
  ex:"AとBとCのスケジュールを考える"→✗"Aを実施","Bを追加","Cを暗記"の3タスク化
   ✓"スケジュールを考える"1件|step:"紙とペンを出す","A/B/Cそれぞれの所要時間を書き出す","今週の空き時間を確認する","カレンダーに書き込む"
@@ -285,8 +287,8 @@ check:移動"〜まで行く"と後始末"戻す/捨てる"が抜けてないか
 urgency:must=今日中|want=近いうち|nice=できれば|scheduled=特定日指定(scheduledDate必須)
 trigger:「〜日にやる」「次の休みに」→scheduled|「〜日まで」→dueDate
 RULE:scheduledDateが今日より未来の場合はurgencyを必ずscheduledにする・mustやwantにしてはいけない
-field:dueDate=締切|scheduledDate=実行予定日|該当なければ省略
-fmt:{"tasks":[{"id":"task_1","title":"","urgency":"must","dueDate":"YYYY-MM-DD","scheduledDate":"YYYY-MM-DD","steps":[{"id":"step_1","title":"","estimatedMinutes":5,"done":false}]}]}`,
+field:dueDate=締切|scheduledDate=実行予定日|place=画像の時だけ場所名(ex:"リビング")|該当なければ省略
+fmt:{"tasks":[{"id":"task_1","title":"","place":"","urgency":"must","dueDate":"YYYY-MM-DD","scheduledDate":"YYYY-MM-DD","steps":[{"id":"step_1","title":"","estimatedMinutes":5,"done":false}]}]}`,
       messages: [{ role: 'user', content: userContent }]
     })
   });
@@ -309,8 +311,9 @@ fmt:{"tasks":[{"id":"task_1","title":"","urgency":"must","dueDate":"YYYY-MM-DD",
 const PHOTO_CTX_TTL = 300;                       // 写真の指示/補足を受け付ける秒数
 const DIRT_SUPPLEMENT_RE = /^補足\s*[:：]\s*/;
 const DEFAULT_IMAGE_INSTRUCTION =
-  '写っている範囲を見て、片付け・掃除が必要な箇所を漏れなく全部挙げてください。' +
-  'タスクは場所ごとに1件にまとめ、個々の箇所はその中のステップにしてください。';
+  '写っている範囲を見て、片付け・掃除が必要な箇所を挙げてください。' +
+  'タスクは必ず1件にまとめ、個々の箇所はその中のステップにしてください。' +
+  'ステップは物の種類ごとに1つにし、色や柄で分けないでください。';
 
 // Claude API の 1 画像あたりの上限は base64 で 5MB。元データだと 5MB×3/4。
 const IMAGE_BYTES_MAX = 5 * 1024 * 1024 * 3 / 4;
@@ -343,6 +346,37 @@ async function fetchLineImage(messageId, env) {
   return { base64: btoa(binary), mediaType };
 }
 
+const URGENCY_RANK = { must: 0, want: 1, nice: 2, scheduled: 3 };
+
+/**
+ * 画像から複数タスクが返ってきたら1件にまとめる。
+ * プロンプトで「1件」と指示しても毎回は守られない(同じ写真でも回によって分割される)ため、
+ * モデル任せにせずここで確定させる。step は種類ごとに1つなので単純に連結して重複を落とす。
+ */
+function mergeImageTasks(tasks) {
+  if (!Array.isArray(tasks) || tasks.length <= 1) return tasks;
+
+  const place = tasks.map(t => (t.place || '').trim()).find(Boolean);
+  const title = place ? `${place}の片付け` : (tasks[0].title || '片付け');
+
+  const steps = [];
+  const seen = new Set();
+  for (const t of tasks) {
+    for (const s of t.steps || []) {
+      const label = (typeof s === 'string' ? s : (s.text || s.title || '')).trim();
+      if (!label || seen.has(label)) continue;
+      seen.add(label);
+      steps.push(s);
+    }
+  }
+  const urgency = tasks.map(t => t.urgency || 'want')
+    .sort((a, b) => (URGENCY_RANK[a] ?? 9) - (URGENCY_RANK[b] ?? 9))[0];
+
+  console.log('[統合]', tasks.length, '件のタスクを1件に:', JSON.stringify(title),
+    `step ${tasks.reduce((n, t) => n + (t.steps || []).length, 0)}→${steps.length}`);
+  return [{ id: 'task_1', title, urgency, steps }];
+}
+
 /** 画像を解析してタスクを追加。replaceBatchId があれば、その回の結果を差し替える */
 async function analyzeImage(replyToken, messageId, instruction, env, userId, replaceBatchId) {
   const img = await fetchLineImage(messageId, env);
@@ -357,13 +391,16 @@ async function analyzeImage(replyToken, messageId, instruction, env, userId, rep
   if (!newTasks) {
     return replyToLine(replyToken, '処理できませんでした。もう一度送ってみてください。', QR_DEFAULT, env);
   }
+  const merged = mergeImageTasks(newTasks);
+  merged.forEach(t => { delete t.place; });   // place は統合用。アプリには渡さない
+
   // 補足で解析し直せるよう、この写真と今回追加したタスクを紐づけて覚えておく
   const batchId = 'img' + Date.now();
   if (userId) {
     await env.TASKS.put(`photo_ctx_${userId}`,
       JSON.stringify({ messageId, batchId, timestamp: Date.now() }), { expirationTtl: PHOTO_CTX_TTL });
   }
-  await addTasksAndReply(replyToken, newTasks, env, batchId, replaceBatchId);
+  await addTasksAndReply(replyToken, merged, env, batchId, replaceBatchId);
 }
 
 /** pending に追加して結果を返信する。replaceBatchId 指定時は前回分を取り除く */
