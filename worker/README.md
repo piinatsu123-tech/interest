@@ -18,6 +18,19 @@ FocusFlow の LINE 連携を担う Cloudflare Worker。
 | `worker.js` | Worker 本体 |
 | `wrangler.toml` | Worker 名・KV バインディング・Cron の設定 |
 
+### 画像解析の精度を上げたいとき
+
+`worker.js` の `MODEL_IMAGE` を変えるだけ（文章側の `MODEL_TEXT` は別なので影響しない）。
+
+| モデル | 画像の最大解像度 | 料金 | 写真1枚あたり |
+|---|---|---|---|
+| `claude-haiku-4-5`（現在） | 長辺 1568px | $1 / $5 per MTok | 約 1.4 円 |
+| `claude-sonnet-5` | 長辺 2576px | $3 / $15 per MTok | 約 5.5 円 |
+
+散らかった部屋の写真で「写っていない物を挙げる」のが減らない場合、原因はたいてい解像度なので
+プロンプトより先にここを疑う。なお **`temperature` は Sonnet 5 / Opus 5 では非デフォルト値が
+400 エラーになる**ので、ハルシネーション対策に使えない（プロンプト側で接地させる）。
+
 デプロイは `.github/workflows/deploy-worker.yml` が担当し、**`worker/` 配下を変更して
 main に push すると自動でデプロイ**される。フロント (GitHub Pages) のデプロイとは独立。
 

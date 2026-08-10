@@ -219,11 +219,21 @@ async function handleMessage(event, env) {
 }
 
 // ─── Claude にタスク分解を依頼する ───────────────────────────────
+// 文章と画像でモデルを分けてある。
+// 画像の誤認識(写っていない物を挙げる)が減らない場合は MODEL_IMAGE だけ上げる:
+//   Haiku 4.5 … 画像を長辺1568pxまでに縮小。$1/$5 per MTok。写真1枚 約1.4円
+//   Sonnet 5  … 長辺2576pxまで扱える(画素数で約2.7倍)。$3/$15。写真1枚 約5.5円
+// ※ temperature は Sonnet 5 / Opus 5 では非デフォルト値が400エラーになるので使えない
+const MODEL_TEXT  = 'claude-haiku-4-5';
+const MODEL_IMAGE = 'claude-haiku-4-5';   // → 'claude-sonnet-5' に変えるだけで画像だけ上がる
+
 /**
  * userContent は Claude の content 配列そのまま（テキストのみ / 画像+テキスト）。
  * 成功したらタスク配列、API エラーや JSON 破損なら null を返す。
  */
 async function askClaudeForTasks(userContent, env) {
+  const hasImage = userContent.some(c => c.type === 'image');
+  const model = hasImage ? MODEL_IMAGE : MODEL_TEXT;
   const today = jstDateStr();
   const holidays = await env.TASKS.get('holidays', { type: 'json' }) || [];
   const futureHolidays = holidays.filter(d => d >= today).sort();
@@ -235,8 +245,8 @@ async function askClaudeForTasks(userContent, env) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 3000,
+      model,
+      max_tokens: 4000,
       system: `role:タスク管理AI|out:JSONのみ・前置き不要|date:${today}${holidayPrompt}
 title:ユーザーが書いた言葉をそのまま使う。別のタスクに置き換えない(画像のみの場合は場所の名前で自分で付ける)
 task_n(文章の場合):原則1件。「AとBとCのX」のAとBとCはXの修飾であってタスクの列挙ではない→"X"1件にする。述語(最後の動詞)が何を求めているかで判断。動詞が複数あり明確に別件の時だけ複数件
@@ -245,8 +255,17 @@ task_n(文章の場合):原則1件。「AとBとCのX」のAとBとCはXの修�
  ✓"リビングの片付け"1件にして、ソファ/床/テーブルはその中のstepにする
  明らかに種類の違う作業(ex:洗い物と洗濯)が写っている時だけタスクを分ける
  漏れなく全部挙げるのはstep側でやる。写っている対処すべき箇所をstepとして全部書く(step数は目安3〜8を超えてよい。上限12)
- 何がどこにあるかを具体的に(✗"床を片付ける" ✓"床の雑誌を棚に戻す")|見えないもの・写っていないことは推測しない
+ 何がどこにあるかを具体的に(✗"床を片付ける" ✓"床の雑誌を棚に戻す")
  物は種類ごとにまとめる。1つ1つを個別に挙げない(✗"雑誌Aを戻す","雑誌Bを戻す" ✓"床の雑誌を棚に戻す")
+写っていないものは書かない(最重要):
+ 各stepは必ず「どこにある何か」で始める。写真のどこにあるか言えない物は書いてはいけない
+ はっきり見えている物だけ。ぼやけて何か分からない物、一部しか見えていない物は挙げない
+ 一般的な部屋にありそう、という理由で書かない。推測・想像で足すのは禁止
+ 迷ったら書かない。挙げる数が少なくなるのは構わない。写っていない物を挙げる方が悪い
+ 置き場所(着点)が写っていない時は"元の場所に戻す"でよい。存在しない収納を作らない
+step同士を重ねない:
+ 同じ物が2つのstepに出てきてはいけない。広いstepと細かいstepを混ぜない
+ ✗"床を片付ける"と"床の雑誌を棚に戻す"が両方ある ✓細かい方だけ残す
  文章が併記されていればそれを最優先の指示として扱う(範囲の限定・優先順位・やらないことの指定など)
 思考タスク:"考える/決める/計画/設計/検討/見直す"はその思考作業自体が1タスク。中身を実行タスクに展開するのは禁止(まだやると決まっていないため)。stepは思考の進め方にする
  ex:"AとBとCのスケジュールを考える"→✗"Aを実施","Bを追加","Cを暗記"の3タスク化
@@ -293,7 +312,13 @@ const DEFAULT_IMAGE_INSTRUCTION =
   '写っている範囲を見て、片付け・掃除が必要な箇所を漏れなく全部挙げてください。' +
   'タスクは場所ごとに1件にまとめ、個々の箇所はその中のステップにしてください。';
 
-/** LINE から画像を取得して base64 に */
+// Claude API の 1 画像あたりの上限は base64 で 5MB。元データだと 5MB×3/4。
+const IMAGE_BYTES_MAX = 5 * 1024 * 1024 * 3 / 4;
+
+/**
+ * LINE から画像を取得して {base64, mediaType} を返す。
+ * media_type は決め打ちにせず Content-Type を使う (LINE は PNG を返すこともある)。
+ */
 async function fetchLineImage(messageId, env) {
   const res = await fetch(`https://api-data.line.me/v2/bot/message/${messageId}/content`,
     { headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN.replace(/\s/g, '')}` } });
@@ -301,21 +326,32 @@ async function fetchLineImage(messageId, env) {
     console.error('[ERROR] LINE画像の取得に失敗', res.status);
     return null;
   }
+  const ct = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  const mediaType = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(ct) ? ct : 'image/jpeg';
+
   const uint8 = new Uint8Array(await res.arrayBuffer());
+  console.log('[画像取得]', mediaType, `${Math.round(uint8.length / 1024)}KB`);
+  if (uint8.length > IMAGE_BYTES_MAX) {
+    console.error('[ERROR] 画像が大きすぎる', uint8.length, '> 上限', Math.round(IMAGE_BYTES_MAX));
+    return null;
+  }
+  // 1文字ずつ足すと巨大な文字列になるのでチャンクに分ける
   let binary = '';
-  for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
-  return btoa(binary);
+  for (let i = 0; i < uint8.length; i += 8192) {
+    binary += String.fromCharCode.apply(null, uint8.subarray(i, i + 8192));
+  }
+  return { base64: btoa(binary), mediaType };
 }
 
 /** 画像を解析してタスクを追加。replaceBatchId があれば、その回の結果を差し替える */
 async function analyzeImage(replyToken, messageId, instruction, env, userId, replaceBatchId) {
-  const base64 = await fetchLineImage(messageId, env);
-  if (!base64) {
+  const img = await fetchLineImage(messageId, env);
+  if (!img) {
     return replyToLine(replyToken, '画像を取得できませんでした。もう一度送ってみてください。', QR_DEFAULT, env);
   }
   console.log('[画像解析]', replaceBatchId ? '補足で再解析' : '新規', JSON.stringify(instruction.slice(0, 60)));
   const newTasks = await askClaudeForTasks([
-    { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
+    { type: 'image', source: { type: 'base64', media_type: img.mediaType, data: img.base64 } },
     { type: 'text', text: instruction }
   ], env);
   if (!newTasks) {
