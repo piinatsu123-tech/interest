@@ -767,12 +767,17 @@ async function handleDirtDetail(replyToken, arg, env) {
   const byDate = {};
   target.forEach(e => { (byDate[e.at] = byDate[e.at] || []).push(e.text); });
 
+  // 曜日は getDay() を使わない。Workers は UTC で動くので JST 深夜が前日と判定され、
+  // 曜日が1日ずれる。日付文字列から直接 UTC で組み立てて getUTCDay() を使う
   const days = ['日', '月', '火', '水', '木', '金', '土'];
+  const weekday = ds => {
+    const [y, m, d] = ds.split('-').map(Number);
+    return days[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  };
   // 新しい日から並べ、LINE の 5000 文字上限に収まる分だけ出す
   const head = `🧹 ${range.label}の記録（${target.length}件 / ${Object.keys(byDate).length}日）\n\n`;
   const all = Object.keys(byDate).sort().reverse().map(d => {
-    const w = days[new Date(d + 'T00:00:00+09:00').getDay()];
-    return `${d.slice(5)}(${w}) ${byDate[d].join('、')}`;
+    return `${d.slice(5)}(${weekday(d)}) ${byDate[d].join('、')}`;
   });
   const lines = [];
   let len = head.length;
