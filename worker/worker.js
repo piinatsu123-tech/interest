@@ -162,7 +162,8 @@ async function handleMessage(event, env) {
   }
 
   // 汚れの記録。「記録！〜」で始まるものはタスクにせず記録だけ残す(Claude を呼ばない)
-  if (text === '記録一覧') return handleDirtList(replyToken, env);
+  if (text?.startsWith('記録一覧')) return handleDirtList(replyToken, text.slice(4), env);
+  if (text?.startsWith('記録詳細')) return handleDirtDetail(replyToken, text.slice(4), env);
   if (text && DIRT_PREFIX_RE.test(text)) return handleDirtLog(replyToken, text, env);
 
   // 「写真:」プレフィックス → 先に指示を預かる(この時点ではタスクにしない)
@@ -604,11 +605,24 @@ function jstDateStrDaysAgo(n) {
 // 半角/全角の ! と、! の後ろのスペース有無をどちらも許容する。
 const DIRT_PREFIX_RE = /^記録\s*[!！]\s*/;
 const DIRT_LOG_MAX = 1000;   // KV の値サイズを抑えるため古いものから捨てる
-const DIRT_WINDOW = 14;      // 集計の対象期間(日)
+const DIRT_WINDOW = 14;      // 「○回目」の即時フィードバックに使う期間(日)
 
-/** 期間内の {ラベル: 回数} を多い順に */
+/** 「記録一覧 1ヶ月」などの期間指定を日数に。null は全期間 */
+function parseDirtRange(arg) {
+  const s = (arg || '').normalize('NFKC').replace(/\s/g, '');
+  if (!s || /^(全部|全期間|すべて|全て|ぜんぶ)$/.test(s)) return { days: null, label: '全期間' };
+  const m = s.match(/^(\d+)\s*(日|週間?|[ヶかカヵ]?月)$/);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  if (!n) return null;
+  if (m[2].startsWith('日')) return { days: n, label: `直近${n}日` };
+  if (m[2].startsWith('週')) return { days: n * 7, label: `直近${n}週間` };
+  return { days: n * 30, label: `直近${n}ヶ月` };
+}
+
+/** 期間内の {ラベル: 回数} を多い順に。days が null なら全期間 */
 function dirtCounts(log, days) {
-  const since = jstDateStrDaysAgo(days);
+  const since = days == null ? '' : jstDateStrDaysAgo(days);
   const counts = {};
   log.filter(e => e.at >= since).forEach(e => { counts[e.text] = (counts[e.text] || 0) + 1; });
   return Object.entries(counts).sort((a, b) => b[1] - a[1]);
@@ -646,9 +660,12 @@ async function handleDirtLog(replyToken, rawText, env) {
   const trimmed = log.slice(-DIRT_LOG_MAX);
   await env.TASKS.put('dirt_log', JSON.stringify(trimmed));
 
-  console.log('[記録]', label, `(2週間で${trimmed.filter(e => e.text === label && e.at >= jstDateStrDaysAgo(DIRT_WINDOW)).length}回目)`);
-  const n = trimmed.filter(e => e.text === label && e.at >= jstDateStrDaysAgo(DIRT_WINDOW)).length;
-  await replyToLine(replyToken, `✓ 記録：${label}（2週間で${n}回目）`, dirtQuickReply(trimmed), env);
+  const same = trimmed.filter(e => e.text === label);
+  const n = same.filter(e => e.at >= jstDateStrDaysAgo(DIRT_WINDOW)).length;
+  // 通算も出す。2週間だと少なく見えて「溜まっていない」と誤解しやすいため
+  const suffix = same.length > n ? `（2週間で${n}回目 / 通算${same.length}回）` : `（2週間で${n}回目）`;
+  console.log('[記録]', label, suffix);
+  await replyToLine(replyToken, `✓ 記録：${label}${suffix}`, dirtQuickReply(trimmed), env);
 }
 
 /** 表記ゆれを AI でまとめる。[[代表名, 合計回数, [元の表記...]], ...] を返す。
@@ -697,27 +714,76 @@ fmt:{"groups":[{"name":"","members":[""]}]}`,
   }
 }
 
-async function handleDirtList(replyToken, env) {
+async function handleDirtList(replyToken, arg, env) {
   const log = await env.TASKS.get('dirt_log', { type: 'json' }) || [];
   if (!log.length) {
     return replyToLine(replyToken,
-      '記録はまだありません。\n\n汚れに気づいたら「記録！ ふきこぼれ」のように送ってください。2週間ためると、実際に多い場面が分かります。',
+      '記録はまだありません。\n\n汚れに気づいたら「記録！ ふきこぼれ」のように送ってください。ためると、実際に多い場面が分かります。',
       { items: [btn('ヘルプ')] }, env);
   }
-  const ranked = dirtCounts(log, DIRT_WINDOW);
+  const range = parseDirtRange(arg);
+  if (!range) {
+    return replyToLine(replyToken,
+      '期間の指定が読み取れませんでした。\n\n記録一覧 → 全期間\n記録一覧 2週間\n記録一覧 1ヶ月\n記録一覧 30日',
+      dirtQuickReply(log), env);
+  }
+  const ranked = dirtCounts(log, range.days);
   if (!ranked.length) {
     return replyToLine(replyToken,
-      `直近2週間の記録はありません。\n（全期間の記録は ${log.length}件）`,
+      `${range.label}の記録はありません。\n（全期間の記録は ${log.length}件）\n\n「記録一覧」だけ送ると全期間で出ます。`,
       dirtQuickReply(log), env);
   }
   const total = ranked.reduce((s, [, c]) => s + c, 0);
+  // 対象になった記録の実際の日付幅。「30日分」と「実際に記録があった期間」は違う
+  const dates = log.filter(e => range.days == null || e.at >= jstDateStrDaysAgo(range.days))
+    .map(e => e.at).sort();
+  const span = dates.length ? `${dates[0]} 〜 ${dates[dates.length - 1]}` : '';
+
   // 「ふきこぼれ/吹きこぼれ」のような表記ゆれを AI でまとめる。
   // 失敗しても集計自体は出せるよう、そのままの一覧にフォールバックする
   const grouped = ranked.length > 1 ? await groupDirtLabels(ranked, env) : null;
   const lines = (grouped || ranked).map(([t, c, variants]) =>
     `・${t}　${c}回` + (variants && variants.length > 1 ? `\n　（${variants.join(' / ')}）` : ''));
-  const msg = `🧹 直近2週間の記録（${total}件）\n\n${lines.join('\n')}\n\n多いものから、道具の置き場所を変えてみてください。`;
+  const msg = `🧹 ${range.label}の記録（${total}件）\n${span}\n\n${lines.join('\n')}\n\n` +
+    '多いものから、道具の置き場所を変えてみてください。\n' +
+    '（期間を変える：記録一覧 2週間 / 1ヶ月）';
   await replyToLine(replyToken, msg, dirtQuickReply(log), env);
+}
+
+/** 日付ごとの記録。件数だけでは分からない「毎日なのか特定の日に固まるのか」を見るため */
+async function handleDirtDetail(replyToken, arg, env) {
+  const log = await env.TASKS.get('dirt_log', { type: 'json' }) || [];
+  if (!log.length) {
+    return replyToLine(replyToken, '記録はまだありません。', { items: [btn('ヘルプ')] }, env);
+  }
+  const range = parseDirtRange(arg);
+  if (!range) {
+    return replyToLine(replyToken, '期間の指定が読み取れませんでした。\n例）記録詳細 1ヶ月', dirtQuickReply(log), env);
+  }
+  const target = log.filter(e => range.days == null || e.at >= jstDateStrDaysAgo(range.days));
+  if (!target.length) {
+    return replyToLine(replyToken, `${range.label}の記録はありません。`, dirtQuickReply(log), env);
+  }
+  const byDate = {};
+  target.forEach(e => { (byDate[e.at] = byDate[e.at] || []).push(e.text); });
+
+  const days = ['日', '月', '火', '水', '木', '金', '土'];
+  // 新しい日から並べ、LINE の 5000 文字上限に収まる分だけ出す
+  const head = `🧹 ${range.label}の記録（${target.length}件 / ${Object.keys(byDate).length}日）\n\n`;
+  const all = Object.keys(byDate).sort().reverse().map(d => {
+    const w = days[new Date(d + 'T00:00:00+09:00').getDay()];
+    return `${d.slice(5)}(${w}) ${byDate[d].join('、')}`;
+  });
+  const lines = [];
+  let len = head.length;
+  for (const line of all) {
+    if (len + line.length + 1 > 4700) break;
+    lines.push(line); len += line.length + 1;
+  }
+  const omitted = all.length - lines.length;
+  await replyToLine(replyToken,
+    head + lines.join('\n') + (omitted ? `\n\n…ほか${omitted}日分は省略（期間を狭めてください）` : ''),
+    dirtQuickReply(log), env);
 }
 
 // ─── ヘルプ ──────────────────────────────────────────────────────
@@ -738,7 +804,8 @@ const HELP_OVERVIEW = `📖 FocusFlow ヘルプ
 📋 コマンド一覧
 
 🧹 汚れの記録
-「記録！ ふきこぼれ」と送るとタスクにならず記録だけ残ります。「記録一覧」で多い順に集計。`;
+「記録！ ふきこぼれ」と送るとタスクにならず記録だけ残ります。
+「記録一覧」で多い順に集計（全期間）。「記録一覧 1ヶ月」で期間指定、「記録詳細」で日付ごと。`;
 
 const HELP_TASK = `📝 タスク追加のコツ
 
@@ -814,11 +881,16 @@ const HELP_COMMANDS = `📋 コマンド一覧
 一覧 → 現在のタスク一覧
 定期一覧 → 定期タスク一覧
 休日一覧 → 登録済み休日一覧
-記録一覧 → 汚れの記録を多い順に
+記録一覧 → 汚れの記録を多い順に（全期間）
+記録一覧 1ヶ月 → 期間を絞る
+記録詳細 → 日付ごとに一覧
 
 【汚れの記録】
 記録！ ふきこぼれ
 → タスクにならず記録だけ残る
+記録一覧 → 多い順に集計（全期間）
+記録一覧 2週間 / 1ヶ月 / 30日 → 期間指定
+記録詳細 → 日付ごとに一覧（曜日や偏りを見る）
 
 【写真】
 写真: 〇〇 → このあと送る写真への指示
