@@ -252,9 +252,14 @@ async function askClaudeForTasks(userContent, env) {
 title:ユーザーが書いた言葉をそのまま使う。別のタスクに置き換えない(画像のみの場合は場所の名前で自分で付ける)
 task_n(文章の場合):原則1件。「AとBとCのX」のAとBとCはXの修飾であってタスクの列挙ではない→"X"1件にする。述語(最後の動詞)が何を求めているかで判断。動詞が複数あり明確に別件の時だけ複数件
 画像がある場合:
- ■タスクは必ず1件。写っている場所の名前を付ける(ex:"リビングの片付け")。placeに場所名だけ入れる
+ ■タスクは必ず1件。titleは「何をするか」で付ける
+  作業が1種類なら、その作業名にする ex:シンクに汚れた食器 → "食器を洗う"
+  種類が混ざっていて場所でまとめる方が自然な時だけ場所名 ex:部屋全体 → "リビングの片付け"
   ✗"ソファの片付け","床の片付け","テーブルの片付け"と分ける ✓"リビングの片付け"1件。ソファ/床/テーブルはstep
   道具も置き場所も違う作業(ex:洗い物と洗濯)が同時に写っている時だけ2件まで。それ以外は必ず1件
+  placeにはtitleと別に、写っている場所名を必ず入れる(ex:"キッチン")
+ ■片付け(物を動かす)だけが対象ではない。洗う/拭く/捨てる も必要なら挙げる
+  汚れた食器は「戻す」のではなく「洗う」。濡れ・こぼれは「拭く」
  ■stepは「物の種類」ごとに1つ。同じ種類の物が何個あってもstepは1つ。散らかっていてもstepは増えない
   ✗"花柄の服を洗濯かごに入れる","ピンクの服を洗濯かごに入れる" ✓"床に落ちている服を洗濯かごに入れる"
   色/柄/素材/ブランド/サイズでstepを分けない。これらの語をstepに書かない
@@ -348,6 +353,8 @@ async function fetchLineImage(messageId, env) {
 }
 
 const URGENCY_RANK = { must: 0, want: 1, nice: 2, scheduled: 3 };
+// 「〜の片付け」のような、何をするのか分からないタイトル
+const GENERIC_TITLE_RE = /片付|掃除|整理|きれい|キレイ|綺麗/;
 
 /**
  * 画像から複数タスクが返ってきたら1件にまとめる。
@@ -358,7 +365,14 @@ function mergeImageTasks(tasks) {
   if (!Array.isArray(tasks) || tasks.length <= 1) return tasks;
 
   const place = tasks.map(t => (t.place || '').trim()).find(Boolean);
-  const title = place ? `${place}の片付け` : (tasks[0].title || '片付け');
+  // 「食器を洗う」のような具体的な作業名があれば、場所名より優先して残す。
+  // 場所名に書き換えると、何をするタスクなのかが消えてしまう
+  const specific = tasks
+    .filter(t => (t.title || '').trim() && !GENERIC_TITLE_RE.test(t.title))
+    .sort((a, b) => (b.steps || []).length - (a.steps || []).length)[0];
+  const title = specific ? specific.title.trim()
+    : place ? `${place}の片付け`
+    : (tasks[0].title || '片付け');
 
   const steps = [];
   const seen = new Set();
